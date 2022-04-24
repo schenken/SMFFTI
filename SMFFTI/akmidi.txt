@@ -1,0 +1,57 @@
+# MIDIFun Input File: akmidi.txt
+#
+# 6/4/22
+#
+# Comment lines (beginning with #) and blank lines ignored.
+# Ruler lines also ignored.
+#
+# MIDI data consists of:
+#	1. Note Positions. Series of groups of hashes. Each
+#	   asterisk represents a 1/32nd of a bar.
+#	2. Chord Names. Comma-separated list. These correspond
+#	   to the hash groups.
+#
+# Each pair of Note Positions and Chord Names occupy 2 lines.
+#
+# Two bars per line.
+#
+# A ruler lines delimits a pair of Note Positions + Chord Names
+# and is required.
+#
+#-------------------------------------------------------------
+
++BassNote
+
++Velocity=60
++RandVelVariation=25
+
++RandNoteStartOffset=0
++RandNoteEndOffset=0
++RandNoteOffsetTrim=0
+
++NoteStagger=0
+
++ProvisionalLowestNote=C3
+#+TransposeThreshold=11
+
++Arpeggiator=8
++ArpTime=8
++ArpGatePercent=50
++ArpOctaveSteps=0
+
+[......|.......|.......|.......]
++############   +#####  ######
+C, Am
+
+[......|.......|.......|.......][......|.......|.......|.......]
++############   +#####  ######  +############   +#####  ######
+Fm7, Am, Gm7, Cm7
+
+[......|.......|.......|.......][......|.......|.......|.......][......|.......|.......|.......][......|.......|.......|.......]
++###############################################################################################################################
+Bbm9
+
+[......|.......|.......|.......][......|.......|.......|.......][......|.......|.......|.......][......|.......|.......|.......]
++###############################+###############################+###############################+###############################
+Bb, F, Dm9, G
+

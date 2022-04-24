@@ -1,0 +1,98 @@
+#include "pch.h"
+#include "Common.h"
+
+namespace akl {
+
+size_t LoadTextFileIntoVector(const std::string& filename, std::vector<std::string>& v)
+{
+    std::ifstream f;
+    f.open(filename.c_str());
+    std::string line;
+    while (getline(f, line))
+    {
+        v.push_back(line);
+    }
+    f.close();
+
+    return v.size();
+}
+
+std::string RemoveWhitespace (const std::string& s, uint8_t mode)
+{
+	// Modes: Leading = 1, Trailing = 2, All = 4, Condense = 8
+
+	const char* pChar = &s[0];
+	std::string s1;
+	s1.resize (s.size());
+
+	int lastChar = 0;	// last char in copy string
+	bool bNewWhiteSpaceBlock = true;
+	bool bLeadingWhitespace = true;
+	while (*pChar)
+	{
+		if (_istspace ((unsigned char)*pChar))
+		{
+			// Whitespace
+
+			if (mode & 0x04)
+			{
+				// skip
+			}
+			else if ((mode & 0x01) && bLeadingWhitespace)
+			{
+				// skip
+			}
+			else if ((mode & 0x08) && !bNewWhiteSpaceBlock)
+			{
+				// skip if not 1st ws char in contiguous series
+			}
+			else
+				s1[lastChar++] = ' ';
+
+			bNewWhiteSpaceBlock = false;
+		}
+		else
+		{
+			// NOT whitespace, so copy
+			bLeadingWhitespace = false;
+			bNewWhiteSpaceBlock = true;
+			s1[lastChar++] = *pChar;
+		}
+
+		pChar++;
+	}
+
+	if (mode & 0x02)
+	{
+		// strip trailing spaces
+		while (s1[lastChar - 1] == ' ')
+			lastChar--;
+	}
+
+	s1.resize (lastChar);
+
+    return s1;
+}
+
+std::vector<std::string> Explode (const std::string& s, const std::string& delim)
+{
+	std::vector<std::string> v;
+
+	std::size_t found = s.find_first_of (delim);
+	int prev = 0;
+	while (found != std::string::npos)
+	{
+		v.push_back (s.substr (prev, found - prev));
+		prev = found + delim.length();
+		found = s.find_first_of (delim, prev);
+	}
+
+	std::string x = s.substr(prev, s.length() - prev);
+	if (x.length() > 0)
+		v.push_back(x);
+
+	return v;
+}
+
+
+}
