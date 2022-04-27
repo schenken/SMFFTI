@@ -41,6 +41,8 @@ public:
 	// Whack out a dead simple MIDI file. Single track with just a few notes.
 	void CreateMIDIFile (std::string filename);
 
+	std::string GetStatusMessage();
+
 private:
 	void GenerateNoteEvents();
 	void SortNoteEventsAndFixOverlaps();
@@ -50,6 +52,8 @@ private:
 
 	void AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordName, bool& bNoteOn, uint32_t nEventTime);
 	int8_t NoteToMidi (std::string sNote, uint8_t& nNote, uint8_t& nSharpFlat);
+
+	bool GetChordIntervals (std::string sChordName, uint8_t& nRoot, std::vector<std::string>& vChordIntervals);
 
 	uint32_t Swap32 (uint32_t n);
 	uint16_t Swap16 (uint16_t n);
@@ -127,10 +131,15 @@ private:
 	int32_t _nNoteCount = -1;
 	int8_t _nNoteStagger = 0;
 
-	std::string _sProvisionalLowestNote = "C3";
+	std::string _sOctaveRegister = "3";	// Default: Root notes placed in the C3 - B3 range.
+
+	// The lowest note (actually a C), determined by _sOctaveRegister, where chord notes
+	// will be placed (excepting optional bass notes). It is notional (or provisional) in
+	// the sense that, when active, downward transposition of upper chord notes might
+	// place notes *bloew* this value.
 	uint8_t _nProvisionalLowestNote = 0;
-	std::string _sOctave;
-	uint8_t _nTransposeThreshold = 127;	// By default, downward tranposition disabled.
+
+	uint8_t _nTransposeThreshold = 48;	// By default, downward transposition unlikely.
 
 	// Arp stuff
 	uint32_t _nArpeggiator = 0;
@@ -138,6 +147,10 @@ private:
 	uint32_t _nArpNoteTicks;
 	float _nArpGatePercent;
 	int8_t _nArpOctaveSteps = 0;	// Positive/negative values to transpose higher/lower
+
+	std::string _sTrackName = "Made by SMFFTI";
+
+	std::string _sStatusMessage = "";
 
 	// Randomizer
 	std::random_device _rdev;
@@ -149,6 +162,8 @@ private:
 	static struct ClassMemberInit { ClassMemberInit(); } cmi;
 
 	static std::map<std::string, std::string>_mChordTypes;
+	static std::map<std::string, uint8_t>_mChromaticScale;
+
 	static std::default_random_engine _eng;
 };
 

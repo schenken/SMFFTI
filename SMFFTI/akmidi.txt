@@ -1,6 +1,14 @@
-# MIDIFun Input File: akmidi.txt
+# SMFFTI Input File: akmidi.txt
 #
-# 6/4/22
+# April 24, 2022
+#
+# Run SMFFTI with:
+#
+#	SMFFTI.exe <input file> <output file>
+#
+# where <input file> specifes instructions and directives, eg. this file;
+# and <output file> is a .mid file that you will pull in to Ableton Live.
+#
 #
 # Comment lines (beginning with #) and blank lines ignored.
 # Ruler lines also ignored.
@@ -13,12 +21,12 @@
 #
 # Each pair of Note Positions and Chord Names occupy 2 lines.
 #
-# Two bars per line.
-#
 # A ruler lines delimits a pair of Note Positions + Chord Names
 # and is required.
 #
 #-------------------------------------------------------------
+
++TrackName=My Test MIDI Sequence
 
 +BassNote
 
@@ -31,16 +39,16 @@
 
 +NoteStagger=0
 
-+ProvisionalLowestNote=C3
-#+TransposeThreshold=11
++OctaveRegister=3
++TransposeThreshold=11
 
-+Arpeggiator=8
++Arpeggiator=0
 +ArpTime=8
 +ArpGatePercent=50
 +ArpOctaveSteps=0
 
-[......|.......|.......|.......]
-+############   +#####  ######
+[......|.......|.......|.......][......|.......|.......|.......]
++###############################+###############################
 C, Am
 
 [......|.......|.......|.......][......|.......|.......|.......]
@@ -53,5 +61,5 @@ Bbm9
 
 [......|.......|.......|.......][......|.......|.......|.......][......|.......|.......|.......][......|.......|.......|.......]
 +###############################+###############################+###############################+###############################
-Bb, F, Dm9, G
+Bb, F, Dm7, G
 

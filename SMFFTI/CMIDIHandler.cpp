@@ -22,6 +22,7 @@ uint8_t CMIDIHandler::Verify()
 
 	uint8_t nDataLines = 0;
 	uint16_t nNumberOfNotes = 0;
+	int32_t nVal = 0;
 
 	for each (auto sLine in _vInput)
 	{
@@ -45,7 +46,7 @@ uint8_t CMIDIHandler::Verify()
 			nDataLines = 0;
 			continue;
 		}
-		
+
 		if (sTemp.size() == 0)	// ignore blank lines
 			continue;
 
@@ -55,9 +56,9 @@ uint8_t CMIDIHandler::Verify()
 		if (sTemp[0] == '+')	// parameter
 		{
 			std::string parameter = sTemp.substr (1, sTemp.size() - 1);
-			int ak = 1;
 
 			std::vector<std::string> vKeyValue = akl::Explode (parameter, "=");
+			std::vector<std::string> vKV2 = akl::Explode (sLine.substr (1, sLine.size() - 1), "=");	// ws not stripped
 
 			if (vKeyValue[0] == "BassNote")
 			{
@@ -66,58 +67,130 @@ uint8_t CMIDIHandler::Verify()
 			}
 			else if (vKeyValue[0] == "Velocity")
 			{
-				_nVelocity = std::stoi (vKeyValue[1]);	// overrides default
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 127))
+				{
+					_sStatusMessage = "Invalid +Velocity value (range 1-127).";
+					return 3;
+				}
+				_nVelocity = nVal;
 			}
 			else if (vKeyValue[0] == "RandVelVariation")
 			{
-				_nRandVelVariation = std::stoi (vKeyValue[1]);
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 127))
+				{
+					_sStatusMessage = "Invalid +RandVelVariation value (range 0-127).";
+					return 4;
+				}
+				_nRandVelVariation = nVal;
 			}
 			else if (vKeyValue[0] == "RandNoteStartOffset")
 			{
-				_nRandNoteStartOffset = std::stoi (vKeyValue[1]);
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 32))
+				{
+					_sStatusMessage = "Invalid +RandNoteStartOffset value (range 0-32).";
+					return 5;
+				}
+				_nRandNoteStartOffset = nVal;
 				if (_nRandNoteStartOffset > 0)
 					_bRandNoteStart = true;
 			}
 			else if (vKeyValue[0] == "RandNoteEndOffset")
 			{
-				_nRandNoteEndOffset = std::stoi (vKeyValue[1]);
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 32))
+				{
+					_sStatusMessage = "Invalid +RandNoteEndOffset value (range 0-32).";
+					return 6;
+				}
+				_nRandNoteEndOffset = nVal;
 				if (_nRandNoteEndOffset > 0)
 					_bRandNoteEnd = true;
 			}
 			else if (vKeyValue[0] == "RandNoteOffsetTrim")
 			{
-				_bRandNoteOffsetTrim = vKeyValue[1] == "1";
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
+				{
+					_sStatusMessage = "Invalid +RandNoteOffsetTrim value (Valid: 0 or 1).";
+					return 7;
+				}
+				_nRandNoteEndOffset = nVal;
+				_bRandNoteOffsetTrim = nVal == 1;
 			}
 			else if (vKeyValue[0] == "NoteStagger")
 			{
-				_nNoteStagger = std::stoi (vKeyValue[1]);
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 32))
+				{
+					_sStatusMessage = "Invalid +NoteStagger value (range 0-32).";
+					return 8;
+				}
+				_nNoteStagger = nVal;
 			}
-			else if (vKeyValue[0] == "ProvisionalLowestNote")
+			else if (vKeyValue[0] == "OctaveRegister")
 			{
-				_sProvisionalLowestNote = vKeyValue[1];
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 7))
+				{
+					_sStatusMessage = "Invalid +OctaveRegister value (range 0-7).";
+					return 9;
+				}
+				_sOctaveRegister = vKeyValue[1];
 			}
 			else if (vKeyValue[0] == "TransposeThreshold")
 			{
-				_nTransposeThreshold = std::stoi (vKeyValue[1]);
-				if (_nTransposeThreshold < 0)
-					_nTransposeThreshold = 0;
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 48))
+				{
+					_sStatusMessage = "Invalid +TransposeThreshold value (range 0-48).";
+					return 10;
+				}
+				_nTransposeThreshold = nVal;
 			}
 			else if (vKeyValue[0] == "Arpeggiator")
 			{
-				_nArpeggiator = std::stoi (vKeyValue[1]);
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 13))
+				{
+					_sStatusMessage = "Invalid +Arpeggiator value (range 0-13).";
+					return 11;
+				}
+				_nArpeggiator = nVal;
 			}
 			else if (vKeyValue[0] == "ArpTime")
 			{
-				_nArpTime = std::stoi (vKeyValue[1]);
+				bool bOK = akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 32);
+				if (bOK && !(nVal > 0 && !(nVal & (nVal - 1))))	// must be power of 2 (1, 2, 4, 8, 16 or 32)
+					bOK = false;
+				if (!bOK)
+				{
+					_sStatusMessage = "Invalid +ArpTime value (Valid: 1, 2, 4, 8, 16, 32).";
+					return 12;
+				}
+				_nArpTime = nVal;
 				_nArpNoteTicks = _ticksPerBar / _nArpTime;
 			}
 			else if (vKeyValue[0] == "ArpGatePercent")
 			{
-				_nArpGatePercent = std::stoi (vKeyValue[1]) / 100.0f;
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 200))
+				{
+					_sStatusMessage = "Invalid +ArpGatePercent value (range 1-200).";
+					return 13;
+				}
+				_nArpGatePercent = nVal / 100.0f;
 			}
 			else if (vKeyValue[0] == "ArpOctaveSteps")
 			{
-				_nArpOctaveSteps = std::stoi (vKeyValue[1]);
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, -6, 6))
+				{
+					_sStatusMessage = "Invalid +ArpOctaveSteps value (range -6 to 6).";
+					return 14;
+				}
+				_nArpOctaveSteps = nVal;
+			}
+			else if (vKeyValue[0] == "TrackName")
+			{
+				_sTrackName = akl::RemoveWhitespace (vKV2[1], 11);
+			}
+			else
+			{
+				std::string p = sLine.substr (1, sTemp.size() - 1);
+				_sStatusMessage = "Unrecognized command file parameter: +" + vKV2[0];
+				return 16;
 			}
 		}
 
@@ -134,11 +207,7 @@ uint8_t CMIDIHandler::Verify()
 			continue;
 		}
 
-		uint8_t e = (uint8_t)EventName::NoteOn | 0x01;
-		uint8_t w = e & 0XF0;
-		int ak = 1;
 	}
-
 
 	// Arpeggiation enabled cancels: Randomized Note Positions., and Note Stagger.
 	if (_nArpeggiator)
@@ -148,17 +217,40 @@ uint8_t CMIDIHandler::Verify()
 		_nNoteStagger = 0;
 	}
 
-	// Translate "Note Octave" to MIDI note number, eg. C4 -> 60
-	uint8_t nSharpFlat = 0;
-	int8_t res = NoteToMidi (_sProvisionalLowestNote, _nProvisionalLowestNote, nSharpFlat);
-	if (res == -1)
-		return 2;
 
-	_sOctave.assign (1, _sProvisionalLowestNote[1]);
+	// 
+	uint8_t nSharpFlat = 0;
+	int8_t res = NoteToMidi ("C" + _sOctaveRegister, _nProvisionalLowestNote, nSharpFlat);
+	if (res == -1)
+	{
+		_sStatusMessage = "Invalid +OctaveRegister value.";
+		return 2;
+	}
+
+
+	// Check chord names are all valid
+	uint32_t nCount = 0;
+	for each (auto c in _vChordNames)
+	{
+		std::vector<std::string> vChordIntervals;
+		uint8_t nRoot = 0;
+		if (!GetChordIntervals (c, nRoot, vChordIntervals))
+			nCount++;
+	}
+	if (nCount)
+	{
+		std::ostringstream ss;
+		ss << "Invalid chord names (" << nCount << ")";
+		_sStatusMessage = ss.str();
+		return 15;
+	}
 
 	// Check we have the same number of chords as note positions
 	if (nNumberOfNotes != _vChordNames.size())
+	{
+		_sStatusMessage = "Number of chords does not match number of notes. (Check your + signs.)";
 		return 1;
+	}
 
 	return result;
 }
@@ -194,9 +286,8 @@ void CMIDIHandler::CreateMIDIFile (std::string filename)
 	PushVariableValue (0);	// Delta-time is variable length.
 	PushInt8 (0xFF);
 	PushInt8 ((uint8_t)MetaEventName::MetaTrackName);
-	_sText = "AK Dummy MIDI Sequence";
-	PushVariableValue (_sText.length());
-	PushText (_sText);
+	PushVariableValue (_sTrackName.length());
+	PushText (_sTrackName);
 
 	//---------------------------------------
 	// Event 2: Meta-event: Time signature
@@ -882,32 +973,15 @@ void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordN
 		return nRand;
 	};
 
-	// Sort out the root note
-	std::string sChord;
-	sChord.assign (1, chordName[0]);
-	if (chordName.size() > 1 && (chordName[1] == 'b' || chordName[1] == '#'))
-		sChord += chordName[1];
-	sChord += _sOctave;
-	uint8_t nRoot;
-	uint8_t nSharpFlat = 0;
-	int8_t res = NoteToMidi (sChord, nRoot, nSharpFlat);
-
-	// Adjust for flat/sharp.
-	uint8_t nCount = 1;
-	if (nSharpFlat > 0)
-		nCount++;
-
-	// Chord type
-	std::string chordType = chordName.substr (nCount, chordName.size() - nCount);
-	if (chordType == "")
-		chordType = "maj";
-	std::vector<std::string> vNoteIntervals = akl::Explode (_mChordTypes[chordType], ",");
+	std::vector<std::string> vChordIntervals;
+	uint8_t nRoot = 0;
+	GetChordIntervals (chordName, nRoot, vChordIntervals);
 
 	// Init note stagger offset. If value positive, start with lowest note; if negative,
 	// start from highest. First note itself is not staggered.
 	int8_t notePosOffset = -_nNoteStagger;
 	if (_nNoteStagger < 0)
-		notePosOffset = -_nNoteStagger * ((uint8_t)vNoteIntervals.size() + 1 + (_bAddBassNote * 1));
+		notePosOffset = -_nNoteStagger * ((uint8_t)vChordIntervals.size() + 1 + (_bAddBassNote * 1));
 		
 	uint8_t nEventType = (bNoteOn ? (uint8_t)EventName::NoteOn : (uint8_t)EventName::NoteOff) | _nChannel;
 	uint32_t nET;
@@ -941,7 +1015,7 @@ void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordN
 	_vMIDINoteEvents.push_back (note);
 
 	// Chord notes
-	for each (auto item in vNoteIntervals)
+	for each (auto item in vChordIntervals)
 	{
 		uint8_t nSemitones = std::stoi (item);
 
@@ -966,41 +1040,74 @@ void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordN
 int8_t CMIDIHandler::NoteToMidi (std::string sNote, uint8_t& nNote, uint8_t& nSharpFlat)
 {
 	size_t nNoteLen = sNote.size();
-	if (nNoteLen < 1 || nNoteLen > 3)
-		return -1;
-
-	char cNoteName = toupper (sNote[0]);
-
-	if (cNoteName == '_')	// can't allow meta char used in search string
-		return -1;
-
-	uint8_t nNote2 = (uint8_t)std::string ("C_D_EF_G_A_B").find (cNoteName);
-	if (nNote2 == std::string::npos)
+	if (nNoteLen < 2 || nNoteLen > 3)
 		return -1;
 
 	char cOctaveNumber = sNote[nNoteLen - 1];
-	uint8_t nOctave = (uint8_t)std::string ("01234567").find (cOctaveNumber);
+	int8_t nOctave = (uint8_t)std::string ("01234567").find (cOctaveNumber);
 	if (nOctave == std::string::npos)
 		return -1;
+
+	std::string sNote2 = sNote.substr (0, nNoteLen - 1);
+	sNote2[0] = std::toupper (sNote2[0]);
+
+	std::map<std::string, uint8_t>::iterator it;
+	it = _mChromaticScale.find (sNote2);
+	if (it == _mChromaticScale.end())
+		return -1;
+
+	uint8_t nNote2 = it->second;
+
 
 	// Middle C is always MIDI note number 60, but manufacturers can decide their
 	// own ranges. Ableton Live sets Middle C as C3.
 	nNote = nNote2 + ((nOctave + 2) * 12);
 
-	if (sNote[1] == '#')
+	if (nNoteLen == 3)
 	{
-		nNote++;
-		nSharpFlat = 1;
-	}
-	else if (sNote[1] == 'b')
-	{
-		nNote--;
-		nSharpFlat = 2;
+		if (sNote[1] == '#')
+			nSharpFlat = 1;
+		else if (sNote[1] == 'b')
+			nSharpFlat = 2;
 	}
 
 	return 0;
 }
 
+bool CMIDIHandler::GetChordIntervals (std::string sChordName, uint8_t& nRoot, std::vector<std::string>& vChordIntervals)
+{
+	bool bOK = true;
+
+	std::string sChord;
+	sChord.assign (1, sChordName[0]);
+	if (sChordName.size() > 1 && (sChordName[1] == 'b' || sChordName[1] == '#'))
+		sChord += sChordName[1];
+	sChord += _sOctaveRegister;
+	uint8_t nSharpFlat = 0;
+	int8_t res = NoteToMidi (sChord, nRoot, nSharpFlat);
+
+	if (res == -1)
+		return false;
+
+	// Adjust for flat/sharp.
+	uint8_t nCount = 1;
+	if (nSharpFlat > 0)
+		nCount++;
+
+	// Chord type
+	std::string chordType = sChordName.substr (nCount, sChordName.size() - nCount);
+	if (chordType == "")
+		chordType = "maj";
+
+	std::map<std::string, std::string>::iterator it;
+	it = _mChordTypes.find (chordType);
+	if (it == _mChordTypes.end())
+		return false;
+
+	vChordIntervals = akl::Explode (_mChordTypes[chordType], ",");
+
+	return bOK;
+}
 
 
 
@@ -1067,8 +1174,15 @@ void CMIDIHandler::PushText (const std::string& s)
 	_nOffset += s.length();
 }
 
+std::string CMIDIHandler::GetStatusMessage()
+{
+	return _sStatusMessage;
+}
+
+
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
+std::map<std::string, uint8_t>CMIDIHandler::_mChromaticScale;
 
 CMIDIHandler::ClassMemberInit CMIDIHandler::cmi;
 
@@ -1087,6 +1201,24 @@ CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 	_mChordTypes.insert (std::pair<std::string, std::string>("7sus2",	"2,7,10"));
 	_mChordTypes.insert (std::pair<std::string, std::string>("sus4",	"5,7"));
 	_mChordTypes.insert (std::pair<std::string, std::string>("7sus4",	"5,7,10"));
+
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("C", 0));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("C#", 1));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("Db", 1));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("D", 2));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("D#", 3));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("Eb", 3));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("E", 4));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("F", 5));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("F#", 6));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("Gb", 6));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("G", 7));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("G#", 8));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("Ab", 8));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("A", 9));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("A#", 10));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("Bb", 10));
+	_mChromaticScale.insert (std::pair<std::string, uint8_t>("B", 11));
 }
 
 // Randomizer static variable declaration

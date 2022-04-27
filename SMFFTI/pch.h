@@ -15,5 +15,6 @@
 #include <map>
 #include <string>
 #include <random>
+#include <sstream>
 
 #endif //PCH_H

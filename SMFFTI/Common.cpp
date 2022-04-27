@@ -94,5 +94,57 @@ std::vector<std::string> Explode (const std::string& s, const std::string& delim
 	return v;
 }
 
+bool VerifyTextInteger (std::string sNum, int32_t& nReturnValue, int32_t nFrom, int32_t nTo)
+{
+	bool bOK = true;
+
+	nReturnValue = 0;
+
+	if (sNum.size() == 0)
+		return false;
+
+	if (nFrom >= 0 && !std::all_of (sNum.begin(), sNum.end(), ::isdigit))
+		return false;
+
+	if (nFrom < 0)
+	{
+		// Negative min value allowed
+		if (sNum[0] == '-')
+		{
+			if (!std::all_of (sNum.begin() + 1, sNum.end(), ::isdigit))
+				return false;
+		}
+		else
+		{
+			if (!std::all_of (sNum.begin(), sNum.end(), ::isdigit))
+				return false;
+		}
+
+		//if (!std::all_of (sNum.begin(), sNum.end(), [](char c) {return ::isdigit(c) || c == '-'; }))
+		//	return false;
+	}
+
+	try {
+		nReturnValue = std::stoi (sNum);
+	}
+	catch (std::invalid_argument & e) {
+		// if no conversion could be performed
+		e;
+		bOK = false;
+	}
+	catch (...) {
+		// everything else
+		bOK = false;
+	}
+
+	if (nReturnValue < nFrom || nReturnValue > nTo)
+	{
+		nReturnValue = 0;
+		bOK = false;
+	}
+
+	return bOK;
+}
+
 
 }

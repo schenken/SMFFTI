@@ -5,6 +5,8 @@
 #include "framework.h"
 #include "SMFFTI.h"
 
+#include <mmsystem.h>
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -34,9 +36,10 @@ int main (int argc, char* argv[])
         else
         {
             // TODO: code your application's behavior here.
-            if (argc < 2)
+            if (argc < 3)
             {
-                std::cout << "Please specify a command file.\0";
+                MessageBeep (MB_ICONERROR);
+                PrintUsage();
                 return 1;
             }
 
@@ -44,11 +47,13 @@ int main (int argc, char* argv[])
             std::ifstream ifs (sMIDICommandFile, std::fstream::in);
             if (!ifs.is_open())
             {
-                std::cout << "ERROR! Unable to open input file.\0";
+                PrintError ("Unable to open input file.");
                 return 1;
             }
 
-            DoStuff (sMIDICommandFile);
+            std::string sOutputMIDIFile (argv[2]);
+
+            DoStuff (sMIDICommandFile, sOutputMIDIFile);
         }
     }
     else
@@ -61,22 +66,42 @@ int main (int argc, char* argv[])
     return nRetCode;
 }
 
-void DoStuff (std::string sFilename)
+void DoStuff (const std::string& sInFile, const std::string sOutFile)
 {
-    CMIDIHandler midiH (sFilename);
+    CMIDIHandler midiH (sInFile);
 
     uint8_t nInFileStatus = midiH.Verify();
-    if (nInFileStatus == 1)
+    if (nInFileStatus != 0)
     {
-        std::cout << "ERROR! Number of chords does not match number of notes. Sort it out, numpty!\n";
+        PrintError (midiH.GetStatusMessage());
         return;
     }
+ 
+    midiH.CreateMIDIFile (sOutFile);
+}
 
-    if (nInFileStatus == 2)
-    {
-        std::cout << "ERROR! Invalid NoteCenter value. Sort it out, chump!\n";
-        return;
-    }
+void PrintUsage()
+{
+    const char* text =
 
-    midiH.CreateMIDIFile ("dummy.mid");
+        "\n"
+        "Simple MIDI Files From Text Input (SMFFTI)\n"
+        "------------------------------------------\n\n"
+
+        "Usage:\n\n"
+
+        "    SMFFTI.exe <infile> <outfile>\n\n"
+
+        "where <infile> is a text file containing instructions and directives\n"
+        "and <outfile> is the name of the MIDI file (.mid) to create.\n\n"
+
+        ;
+
+    printf (text);
+}
+
+void PrintError (std::string sMsg)
+{
+    MessageBeep (MB_ICONERROR);
+    std::cout << "\nERROR! " << sMsg << "\n\n";
 }
