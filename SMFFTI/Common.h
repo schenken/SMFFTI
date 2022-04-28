@@ -10,4 +10,6 @@ std::vector<std::string> Explode (const std::string& s, const std::string& delim
 
 bool VerifyTextInteger (std::string sNum, int32_t& nReturnValue, int32_t nFrom, int32_t nTo);
 
+bool MyFileExists (const std::string& name);
+
 }

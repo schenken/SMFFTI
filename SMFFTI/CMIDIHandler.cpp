@@ -2,6 +2,10 @@
 #include "CMIDIHandler.h"
 #include "Common.h"
 
+//
+// Last used return status value: 28
+//
+
 CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 {
 	_ticksPer32nd = _ticksPerQtrNote / 8;
@@ -16,6 +20,7 @@ CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 
 uint8_t CMIDIHandler::Verify()
 {
+
 	uint8_t result = 0;
 
 	akl::LoadTextFileIntoVector (_sInputFile, _vInput);
@@ -23,27 +28,28 @@ uint8_t CMIDIHandler::Verify()
 	uint8_t nDataLines = 0;
 	uint16_t nNumberOfNotes = 0;
 	int32_t nVal = 0;
+	uint32_t nLineNum = 0;
+	uint32_t nRulerLen = 0;
+	bool bCommentBlock = false;
 
 	for each (auto sLine in _vInput)
 	{
+		nLineNum++;
+
 		std::string sTemp = akl::RemoveWhitespace (sLine, 4); // strip all ws
 
-		if (nDataLines == 1)
+		if (bCommentBlock)
+			continue;
+
+		if (sTemp == "(#")
 		{
-			// This should be a Note Position line, ie. series of hashes
-			std::string sNotePositions = akl::RemoveWhitespace (sLine, 2);	// strip trailing spaces
-			_vNotePositions.push_back (sNotePositions);
-			nNumberOfNotes += std::count (sNotePositions.begin(), sNotePositions.end(), '+');
-			nDataLines++;
+			bCommentBlock = true;
 			continue;
 		}
 
-		if (nDataLines == 2)
+		if (sTemp == "#)")
 		{
-			// This should be a list of chord names, comma-separated.
-			std::vector<std::string> v = akl::Explode (sTemp, ",");
-			_vChordNames.insert (_vChordNames.end(), v.begin(), v.end());
-			nDataLines = 0;
+			bCommentBlock = false;
 			continue;
 		}
 
@@ -52,6 +58,93 @@ uint8_t CMIDIHandler::Verify()
 
 		if (sTemp[0] == '#')	// ignore comments
 			continue;
+
+		if (nDataLines == 1)
+		{
+			// Expected Note Positions line.
+			std::string sNotePositions = akl::RemoveWhitespace (sLine, 2);	// strip trailing spaces
+
+			if (sNotePositions.size() == 0)
+			{
+				std::ostringstream ss;
+				ss << "Blank Note Positions at line " << nLineNum;
+				_sStatusMessage = ss.str();
+				return 18;
+			}
+
+			// Check we've only got spaces, pluses or hashes.
+			bool res = std::all_of (sNotePositions.begin(), sNotePositions.end(), 
+				[](char c) { return c == ' ' || c == '+' || c == '#' ; });
+
+			if (res == false) {
+				std::ostringstream ss;
+				ss << "Illegal character in Note Positions line " << nLineNum << ".\n"
+					<< "Valid characters: +, # and space.";
+				_sStatusMessage = ss.str();
+				return 17;
+			}
+
+			// First non-space char must be a +.
+			if (akl::RemoveWhitespace (sNotePositions, 1)[0] != '+')
+			{
+				std::ostringstream ss;
+				ss << "Line " << nLineNum << ": First non-space character must be a plus (+).";
+				_sStatusMessage = ss.str();
+				return 19;
+			}
+
+			// Must not exceed length of ruler line
+			if (sNotePositions.size() > nRulerLen)
+			{
+				std::ostringstream ss;
+				ss << "Line " << nLineNum << ": Too long - must not exceed length of ruler line.";
+				_sStatusMessage = ss.str();
+				return 20;
+			}
+
+			_vNotePositions.push_back (sNotePositions);
+			nNumberOfNotes += std::count (sNotePositions.begin(), sNotePositions.end(), '+');
+			nDataLines++;
+			continue;
+		}
+
+		if (nDataLines == 2)
+		{
+			std::vector<std::string> v = akl::Explode (sTemp, ",");
+			if (v.size() == 0)
+			{
+				std::ostringstream ss;
+				ss << "Line " << nLineNum << ": Missing chord list.";
+				_sStatusMessage = ss.str();
+				return 23;
+			}
+
+			for each (auto c in v)
+			{
+				std::vector<std::string> vChordIntervals;
+				uint8_t nRoot = 0;
+				if (!GetChordIntervals (c, nRoot, vChordIntervals))
+				{
+					std::ostringstream ss;
+					ss << "Line " << nLineNum << ": Invalid/blank chord name: " << c;
+					_sStatusMessage = ss.str();
+					return 24;
+				}
+			}
+
+			_vChordNames.insert (_vChordNames.end(), v.begin(), v.end());
+			nDataLines = 0;
+			continue;
+		}
+
+		// Orphan Note Position line.
+		if (std::all_of (sTemp.begin(), sTemp.end(), [](char c) { return c == ' ' || c == '+' || c == '#'; }))
+		{
+			std::ostringstream ss;
+			ss << "Line " << nLineNum << ": Stray Note Position line? Should be preceded by a ruler line.";
+			_sStatusMessage = ss.str();
+			return 25;
+		}
 
 		if (sTemp[0] == '+')	// parameter
 		{
@@ -112,7 +205,6 @@ uint8_t CMIDIHandler::Verify()
 					_sStatusMessage = "Invalid +RandNoteOffsetTrim value (Valid: 0 or 1).";
 					return 7;
 				}
-				_nRandNoteEndOffset = nVal;
 				_bRandNoteOffsetTrim = nVal == 1;
 			}
 			else if (vKeyValue[0] == "NoteStagger")
@@ -192,6 +284,8 @@ uint8_t CMIDIHandler::Verify()
 				_sStatusMessage = "Unrecognized command file parameter: +" + vKV2[0];
 				return 16;
 			}
+
+			continue;
 		}
 
 		if (sTemp.substr (0, 32) == "[......|.......|.......|.......]")
@@ -200,13 +294,38 @@ uint8_t CMIDIHandler::Verify()
 			// (1) Note Positions: series of hash groups
 			// (2) Comma-separated Chord Names, one for each of the Note Position hash groups.
 
+			nRulerLen = sTemp.length();
+
+			if (nRulerLen % 32 != 0)
+			{
+				std::ostringstream ss;
+				ss << "Line " << nLineNum << ": Invalid ruler line.";
+				_sStatusMessage = ss.str();
+				return 21;
+			}
+
 			uint32_t nNumBars = sTemp.length() / 32;
+			for (uint32_t i = 1; i < nNumBars; i++)
+			{
+				if (sTemp.substr (i * 32, 32) != "[......|.......|.......|.......]")
+				{
+					std::ostringstream ss;
+					ss << "Line " << nLineNum << ": Invalid ruler line.";
+					_sStatusMessage = ss.str();
+					return 22;
+				}
+			}
+
 			_vBarCount.push_back (nNumBars);
 
 			nDataLines++;
 			continue;
 		}
 
+		std::ostringstream ss;
+		ss << "Line " << nLineNum << ": Invalid line.";
+		_sStatusMessage = ss.str();
+		return 26;
 	}
 
 	// Arpeggiation enabled cancels: Randomized Note Positions., and Note Stagger.
@@ -217,8 +336,6 @@ uint8_t CMIDIHandler::Verify()
 		_nNoteStagger = 0;
 	}
 
-
-	// 
 	uint8_t nSharpFlat = 0;
 	int8_t res = NoteToMidi ("C" + _sOctaveRegister, _nProvisionalLowestNote, nSharpFlat);
 	if (res == -1)
@@ -227,22 +344,10 @@ uint8_t CMIDIHandler::Verify()
 		return 2;
 	}
 
-
-	// Check chord names are all valid
-	uint32_t nCount = 0;
-	for each (auto c in _vChordNames)
+	if (_vChordNames.size() == 0)
 	{
-		std::vector<std::string> vChordIntervals;
-		uint8_t nRoot = 0;
-		if (!GetChordIntervals (c, nRoot, vChordIntervals))
-			nCount++;
-	}
-	if (nCount)
-	{
-		std::ostringstream ss;
-		ss << "Invalid chord names (" << nCount << ")";
-		_sStatusMessage = ss.str();
-		return 15;
+		_sStatusMessage = "No chords specified - output file will not be produced.";
+		return 27;
 	}
 
 	// Check we have the same number of chords as note positions
@@ -255,8 +360,19 @@ uint8_t CMIDIHandler::Verify()
 	return result;
 }
 
-void CMIDIHandler::CreateMIDIFile (std::string filename)
+uint8_t CMIDIHandler::CreateMIDIFile (std::string filename, bool bOverwriteOutFile)
 {
+	uint8_t nRes = 0;
+
+	if (!bOverwriteOutFile && akl::MyFileExists (filename))
+	{
+		std::ostringstream ss;
+		ss << "Output file already exists. Use the -o switch to overwrite, eg:\n"
+			<< "SMFFTI.exe midicmds.txt MyMIDIFile.mid -o";
+		_sStatusMessage = ss.str();
+		return 28;
+	}
+
 	std::ofstream ofs (filename, std::ios::binary);
 
 	//-------------------------------------------------------------------------
@@ -323,6 +439,8 @@ void CMIDIHandler::CreateMIDIFile (std::string filename)
 	ofs.write ((char*)&_vTrackBuf[0], _vTrackBuf.size());				// Chunk data.
 
 	ofs.close();
+
+	return nRes;
 }
 
 void CMIDIHandler::GenerateNoteEvents()
@@ -1179,7 +1297,8 @@ std::string CMIDIHandler::GetStatusMessage()
 	return _sStatusMessage;
 }
 
-
+//-----------------------------------------------------------------------------
+// Static class members
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
 std::map<std::string, uint8_t>CMIDIHandler::_mChromaticScale;

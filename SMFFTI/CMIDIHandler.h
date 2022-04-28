@@ -39,7 +39,7 @@ public:
 	uint8_t Verify();	// Load command file and check content is valid.
 
 	// Whack out a dead simple MIDI file. Single track with just a few notes.
-	void CreateMIDIFile (std::string filename);
+	uint8_t CreateMIDIFile (std::string filename, bool bOverwriteOutFile);
 
 	std::string GetStatusMessage();
 
@@ -119,7 +119,6 @@ private:
 	std::vector<MIDINote> _vMIDINoteEvents;
 
 	std::vector<MIDINote> _vMIDINoteEvents2;
-
 
 	bool _bAddBassNote = false;
 	uint8_t _nRandNoteStartOffset = 0;

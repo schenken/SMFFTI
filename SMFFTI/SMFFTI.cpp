@@ -53,7 +53,7 @@ int main (int argc, char* argv[])
 
             std::string sOutputMIDIFile (argv[2]);
 
-            DoStuff (sMIDICommandFile, sOutputMIDIFile);
+            DoStuff (argc, argv, sMIDICommandFile, sOutputMIDIFile);
         }
     }
     else
@@ -66,18 +66,35 @@ int main (int argc, char* argv[])
     return nRetCode;
 }
 
-void DoStuff (const std::string& sInFile, const std::string sOutFile)
+void DoStuff (int argc, char* argv[], const std::string& sInFile, const std::string sOutFile)
 {
+    bool bOverwriteOutFile = false;
+    if (argc > 3)
+    {
+        for (uint8_t i = 3; i < argc; i++)
+        {
+            std::string sArg (argv[i]);
+            if (sArg == "-o")
+            {
+                bOverwriteOutFile = true;
+                continue;
+            }
+        }
+    }
+
     CMIDIHandler midiH (sInFile);
 
-    uint8_t nInFileStatus = midiH.Verify();
-    if (nInFileStatus != 0)
+    if (midiH.Verify() != 0)
     {
         PrintError (midiH.GetStatusMessage());
         return;
     }
  
-    midiH.CreateMIDIFile (sOutFile);
+    if (midiH.CreateMIDIFile (sOutFile, bOverwriteOutFile) != 0)
+    {
+        PrintError (midiH.GetStatusMessage());
+        return;
+    }
 }
 
 void PrintUsage()

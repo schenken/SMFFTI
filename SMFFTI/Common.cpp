@@ -21,6 +21,9 @@ std::string RemoveWhitespace (const std::string& s, uint8_t mode)
 {
 	// Modes: Leading = 1, Trailing = 2, All = 4, Condense = 8
 
+	if (s.size() == 0)
+		return "";
+
 	const char* pChar = &s[0];
 	std::string s1;
 	s1.resize (s.size());
@@ -146,5 +149,10 @@ bool VerifyTextInteger (std::string sNum, int32_t& nReturnValue, int32_t nFrom, 
 	return bOK;
 }
 
+bool MyFileExists (const std::string& name)
+{
+	std::ifstream f (name.c_str());
+	return f.good();
+}
 
 }
