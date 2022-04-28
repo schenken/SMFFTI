@@ -34,14 +34,46 @@ enum class MetaEventName : uint8_t
 class CMIDIHandler
 {
 public:
+
+	enum class StatusCode : uint16_t
+	{
+		Success,
+		NumberOfChordsDoesNotMatchNoteCount,
+		InvalidVelocityValue,
+		InvalidRandomVelocityVariationValue,
+		InvalidRandomNoteStartOffsetValue,
+		InvalidRandomNoteEndOffsetValue,
+		InvalidRandomNoteOffsetTrimValue,
+		InvalidNoteStaggerValue,
+		InvalidOctaveRegisterValue,
+		InvalidTransposeThresholdValue,
+		InvalidArpeggiatorValue,
+		InvalidArpeggiatorTimeValue,
+		InvalidArpeggiatorGatePercentValue,
+		InvalidArpeggiatorOctaveStepsValue,
+		UnrecognizedCommandFileParameter,
+		IllegalCharInNotePositionsLine,
+		BlankNotePositions,
+		FirstNonSpaceCharInNotePosLineMustBePlus,
+		NotePositionLineTooLong,
+		InvalidRulerLine,
+		MissingChordList,
+		InvalidOrBlankChordName,
+		StrayNotePositionLine,
+		InvalidLine,
+		NoChordsSpecified,
+		OutputFileAlreadyExists
+	};
+
 	CMIDIHandler (std::string sInputFile);
 
-	uint8_t Verify();	// Load command file and check content is valid.
+	StatusCode Verify();	// Load command file and check content is valid.
 
 	// Whack out a dead simple MIDI file. Single track with just a few notes.
-	uint8_t CreateMIDIFile (std::string filename, bool bOverwriteOutFile);
+	StatusCode CreateMIDIFile (std::string filename, bool bOverwriteOutFile);
 
 	std::string GetStatusMessage();
+
 
 private:
 	void GenerateNoteEvents();

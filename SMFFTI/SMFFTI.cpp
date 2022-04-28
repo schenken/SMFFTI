@@ -84,13 +84,13 @@ void DoStuff (int argc, char* argv[], const std::string& sInFile, const std::str
 
     CMIDIHandler midiH (sInFile);
 
-    if (midiH.Verify() != 0)
+    if (midiH.Verify() != CMIDIHandler::StatusCode::Success)
     {
         PrintError (midiH.GetStatusMessage());
         return;
     }
  
-    if (midiH.CreateMIDIFile (sOutFile, bOverwriteOutFile) != 0)
+    if (midiH.CreateMIDIFile (sOutFile, bOverwriteOutFile) != CMIDIHandler::StatusCode::Success)
     {
         PrintError (midiH.GetStatusMessage());
         return;

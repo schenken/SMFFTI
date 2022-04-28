@@ -2,10 +2,6 @@
 #include "CMIDIHandler.h"
 #include "Common.h"
 
-//
-// Last used return status value: 28
-//
-
 CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 {
 	_ticksPer32nd = _ticksPerQtrNote / 8;
@@ -18,10 +14,9 @@ CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 	_eng.seed (_rdev());
 }
 
-uint8_t CMIDIHandler::Verify()
+CMIDIHandler::StatusCode CMIDIHandler::Verify()
 {
-
-	uint8_t result = 0;
+	StatusCode result = StatusCode::Success;
 
 	akl::LoadTextFileIntoVector (_sInputFile, _vInput);
 
@@ -38,9 +33,6 @@ uint8_t CMIDIHandler::Verify()
 
 		std::string sTemp = akl::RemoveWhitespace (sLine, 4); // strip all ws
 
-		if (bCommentBlock)
-			continue;
-
 		if (sTemp == "(#")
 		{
 			bCommentBlock = true;
@@ -52,6 +44,9 @@ uint8_t CMIDIHandler::Verify()
 			bCommentBlock = false;
 			continue;
 		}
+
+		if (bCommentBlock)
+			continue;
 
 		if (sTemp.size() == 0)	// ignore blank lines
 			continue;
@@ -69,7 +64,7 @@ uint8_t CMIDIHandler::Verify()
 				std::ostringstream ss;
 				ss << "Blank Note Positions at line " << nLineNum;
 				_sStatusMessage = ss.str();
-				return 18;
+				return StatusCode::BlankNotePositions;
 			}
 
 			// Check we've only got spaces, pluses or hashes.
@@ -81,7 +76,7 @@ uint8_t CMIDIHandler::Verify()
 				ss << "Illegal character in Note Positions line " << nLineNum << ".\n"
 					<< "Valid characters: +, # and space.";
 				_sStatusMessage = ss.str();
-				return 17;
+				return StatusCode::IllegalCharInNotePositionsLine;
 			}
 
 			// First non-space char must be a +.
@@ -90,7 +85,7 @@ uint8_t CMIDIHandler::Verify()
 				std::ostringstream ss;
 				ss << "Line " << nLineNum << ": First non-space character must be a plus (+).";
 				_sStatusMessage = ss.str();
-				return 19;
+				return StatusCode::FirstNonSpaceCharInNotePosLineMustBePlus;
 			}
 
 			// Must not exceed length of ruler line
@@ -99,7 +94,7 @@ uint8_t CMIDIHandler::Verify()
 				std::ostringstream ss;
 				ss << "Line " << nLineNum << ": Too long - must not exceed length of ruler line.";
 				_sStatusMessage = ss.str();
-				return 20;
+				return StatusCode::NotePositionLineTooLong;
 			}
 
 			_vNotePositions.push_back (sNotePositions);
@@ -116,7 +111,7 @@ uint8_t CMIDIHandler::Verify()
 				std::ostringstream ss;
 				ss << "Line " << nLineNum << ": Missing chord list.";
 				_sStatusMessage = ss.str();
-				return 23;
+				return StatusCode::MissingChordList;
 			}
 
 			for each (auto c in v)
@@ -128,7 +123,7 @@ uint8_t CMIDIHandler::Verify()
 					std::ostringstream ss;
 					ss << "Line " << nLineNum << ": Invalid/blank chord name: " << c;
 					_sStatusMessage = ss.str();
-					return 24;
+					return StatusCode::InvalidOrBlankChordName;
 				}
 			}
 
@@ -143,7 +138,7 @@ uint8_t CMIDIHandler::Verify()
 			std::ostringstream ss;
 			ss << "Line " << nLineNum << ": Stray Note Position line? Should be preceded by a ruler line.";
 			_sStatusMessage = ss.str();
-			return 25;
+			return StatusCode::StrayNotePositionLine;
 		}
 
 		if (sTemp[0] == '+')	// parameter
@@ -163,7 +158,7 @@ uint8_t CMIDIHandler::Verify()
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 127))
 				{
 					_sStatusMessage = "Invalid +Velocity value (range 1-127).";
-					return 3;
+					return StatusCode::InvalidVelocityValue;
 				}
 				_nVelocity = nVal;
 			}
@@ -172,7 +167,7 @@ uint8_t CMIDIHandler::Verify()
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 127))
 				{
 					_sStatusMessage = "Invalid +RandVelVariation value (range 0-127).";
-					return 4;
+					return StatusCode::InvalidRandomVelocityVariationValue;
 				}
 				_nRandVelVariation = nVal;
 			}
@@ -181,7 +176,7 @@ uint8_t CMIDIHandler::Verify()
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 32))
 				{
 					_sStatusMessage = "Invalid +RandNoteStartOffset value (range 0-32).";
-					return 5;
+					return StatusCode::InvalidRandomNoteStartOffsetValue;
 				}
 				_nRandNoteStartOffset = nVal;
 				if (_nRandNoteStartOffset > 0)
@@ -192,7 +187,7 @@ uint8_t CMIDIHandler::Verify()
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 32))
 				{
 					_sStatusMessage = "Invalid +RandNoteEndOffset value (range 0-32).";
-					return 6;
+					return StatusCode::InvalidRandomNoteEndOffsetValue;
 				}
 				_nRandNoteEndOffset = nVal;
 				if (_nRandNoteEndOffset > 0)
@@ -203,7 +198,7 @@ uint8_t CMIDIHandler::Verify()
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
 				{
 					_sStatusMessage = "Invalid +RandNoteOffsetTrim value (Valid: 0 or 1).";
-					return 7;
+					return StatusCode::InvalidRandomNoteOffsetTrimValue;
 				}
 				_bRandNoteOffsetTrim = nVal == 1;
 			}
@@ -212,7 +207,7 @@ uint8_t CMIDIHandler::Verify()
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 32))
 				{
 					_sStatusMessage = "Invalid +NoteStagger value (range 0-32).";
-					return 8;
+					return StatusCode::InvalidNoteStaggerValue;
 				}
 				_nNoteStagger = nVal;
 			}
@@ -221,16 +216,18 @@ uint8_t CMIDIHandler::Verify()
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 7))
 				{
 					_sStatusMessage = "Invalid +OctaveRegister value (range 0-7).";
-					return 9;
+					return StatusCode::InvalidOctaveRegisterValue;
 				}
 				_sOctaveRegister = vKeyValue[1];
+				uint8_t nSharpFlat = 0;
+				int8_t res = NoteToMidi ("C" + _sOctaveRegister, _nProvisionalLowestNote, nSharpFlat);
 			}
 			else if (vKeyValue[0] == "TransposeThreshold")
 			{
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 48))
 				{
 					_sStatusMessage = "Invalid +TransposeThreshold value (range 0-48).";
-					return 10;
+					return StatusCode::InvalidTransposeThresholdValue;
 				}
 				_nTransposeThreshold = nVal;
 			}
@@ -239,7 +236,7 @@ uint8_t CMIDIHandler::Verify()
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 13))
 				{
 					_sStatusMessage = "Invalid +Arpeggiator value (range 0-13).";
-					return 11;
+					return StatusCode::InvalidArpeggiatorValue;
 				}
 				_nArpeggiator = nVal;
 			}
@@ -251,7 +248,7 @@ uint8_t CMIDIHandler::Verify()
 				if (!bOK)
 				{
 					_sStatusMessage = "Invalid +ArpTime value (Valid: 1, 2, 4, 8, 16, 32).";
-					return 12;
+					return StatusCode::InvalidArpeggiatorTimeValue;
 				}
 				_nArpTime = nVal;
 				_nArpNoteTicks = _ticksPerBar / _nArpTime;
@@ -261,7 +258,7 @@ uint8_t CMIDIHandler::Verify()
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 200))
 				{
 					_sStatusMessage = "Invalid +ArpGatePercent value (range 1-200).";
-					return 13;
+					return StatusCode::InvalidArpeggiatorGatePercentValue;
 				}
 				_nArpGatePercent = nVal / 100.0f;
 			}
@@ -270,7 +267,7 @@ uint8_t CMIDIHandler::Verify()
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, -6, 6))
 				{
 					_sStatusMessage = "Invalid +ArpOctaveSteps value (range -6 to 6).";
-					return 14;
+					return StatusCode::InvalidArpeggiatorOctaveStepsValue;
 				}
 				_nArpOctaveSteps = nVal;
 			}
@@ -282,7 +279,7 @@ uint8_t CMIDIHandler::Verify()
 			{
 				std::string p = sLine.substr (1, sTemp.size() - 1);
 				_sStatusMessage = "Unrecognized command file parameter: +" + vKV2[0];
-				return 16;
+				return StatusCode::UnrecognizedCommandFileParameter;
 			}
 
 			continue;
@@ -301,7 +298,7 @@ uint8_t CMIDIHandler::Verify()
 				std::ostringstream ss;
 				ss << "Line " << nLineNum << ": Invalid ruler line.";
 				_sStatusMessage = ss.str();
-				return 21;
+				return StatusCode::InvalidRulerLine;
 			}
 
 			uint32_t nNumBars = sTemp.length() / 32;
@@ -312,7 +309,7 @@ uint8_t CMIDIHandler::Verify()
 					std::ostringstream ss;
 					ss << "Line " << nLineNum << ": Invalid ruler line.";
 					_sStatusMessage = ss.str();
-					return 22;
+					return StatusCode::InvalidRulerLine;
 				}
 			}
 
@@ -325,7 +322,7 @@ uint8_t CMIDIHandler::Verify()
 		std::ostringstream ss;
 		ss << "Line " << nLineNum << ": Invalid line.";
 		_sStatusMessage = ss.str();
-		return 26;
+		return StatusCode::InvalidLine;
 	}
 
 	// Arpeggiation enabled cancels: Randomized Note Positions., and Note Stagger.
@@ -336,33 +333,25 @@ uint8_t CMIDIHandler::Verify()
 		_nNoteStagger = 0;
 	}
 
-	uint8_t nSharpFlat = 0;
-	int8_t res = NoteToMidi ("C" + _sOctaveRegister, _nProvisionalLowestNote, nSharpFlat);
-	if (res == -1)
-	{
-		_sStatusMessage = "Invalid +OctaveRegister value.";
-		return 2;
-	}
-
 	if (_vChordNames.size() == 0)
 	{
 		_sStatusMessage = "No chords specified - output file will not be produced.";
-		return 27;
+		return StatusCode::NoChordsSpecified;
 	}
 
 	// Check we have the same number of chords as note positions
 	if (nNumberOfNotes != _vChordNames.size())
 	{
 		_sStatusMessage = "Number of chords does not match number of notes. (Check your + signs.)";
-		return 1;
+		return StatusCode::NumberOfChordsDoesNotMatchNoteCount;
 	}
 
 	return result;
 }
 
-uint8_t CMIDIHandler::CreateMIDIFile (std::string filename, bool bOverwriteOutFile)
+CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (std::string filename, bool bOverwriteOutFile)
 {
-	uint8_t nRes = 0;
+	StatusCode nRes = StatusCode::Success;
 
 	if (!bOverwriteOutFile && akl::MyFileExists (filename))
 	{
@@ -370,7 +359,7 @@ uint8_t CMIDIHandler::CreateMIDIFile (std::string filename, bool bOverwriteOutFi
 		ss << "Output file already exists. Use the -o switch to overwrite, eg:\n"
 			<< "SMFFTI.exe midicmds.txt MyMIDIFile.mid -o";
 		_sStatusMessage = ss.str();
-		return 28;
+		return StatusCode::OutputFileAlreadyExists;
 	}
 
 	std::ofstream ofs (filename, std::ios::binary);
