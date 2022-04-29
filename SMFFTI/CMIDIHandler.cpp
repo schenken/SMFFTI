@@ -4,6 +4,7 @@
 
 CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 {
+	_ticksPer16th = _ticksPerQtrNote / 4;
 	_ticksPer32nd = _ticksPerQtrNote / 8;
 	_ticksPerBar = _ticksPerQtrNote * 4;
 
@@ -146,11 +147,25 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			std::string parameter = sTemp.substr (1, sTemp.size() - 1);
 
 			std::vector<std::string> vKeyValue = akl::Explode (parameter, "=");
+
+			if (vKeyValue.size() < 2)
+			{
+				std::ostringstream ss;
+				ss << "Line " << nLineNum << ": Value not supplied for +" << vKeyValue[0];
+				_sStatusMessage = ss.str();
+				return StatusCode::ParameterValueMissing;
+			}
+			
 			std::vector<std::string> vKV2 = akl::Explode (sLine.substr (1, sLine.size() - 1), "=");	// ws not stripped
 
 			if (vKeyValue[0] == "BassNote")
 			{
-				_bAddBassNote = true;
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
+				{
+					_sStatusMessage = "Invalid +BassNote value (valid: 0 or 1).";
+					return StatusCode::InvalidBassNoteValue;
+				}
+				_bAddBassNote = nVal == 1;
 				continue;
 			}
 			else if (vKeyValue[0] == "Velocity")
@@ -197,16 +212,16 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			{
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
 				{
-					_sStatusMessage = "Invalid +RandNoteOffsetTrim value (Valid: 0 or 1).";
+					_sStatusMessage = "Invalid +RandNoteOffsetTrim value (valid: 0 or 1).";
 					return StatusCode::InvalidRandomNoteOffsetTrimValue;
 				}
 				_bRandNoteOffsetTrim = nVal == 1;
 			}
 			else if (vKeyValue[0] == "NoteStagger")
 			{
-				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 32))
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, -32, 32))
 				{
-					_sStatusMessage = "Invalid +NoteStagger value (range 0-32).";
+					_sStatusMessage = "Invalid +NoteStagger value (range -32 to 32).";
 					return StatusCode::InvalidNoteStaggerValue;
 				}
 				_nNoteStagger = nVal;
@@ -275,6 +290,18 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			{
 				_sTrackName = akl::RemoveWhitespace (vKV2[1], 11);
 			}
+			else if (vKeyValue[0] == "FunkStrum")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 6))
+				{
+					_sStatusMessage = "Invalid +FunkStrum value (range 0-6).";
+					return StatusCode::InvalidFunkStrumValue;
+				}
+				_bFunkStrum = nVal > 0;
+				if (_bFunkStrum)
+					_nNoteStagger = nVal;
+				continue;
+			}
 			else
 			{
 				std::string p = sLine.substr (1, sTemp.size() - 1);
@@ -325,6 +352,15 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 		return StatusCode::InvalidLine;
 	}
 
+	// FunkStrum cancels: Arp, Random Velocity and Random Note Positions.
+	if (_bFunkStrum)
+	{
+		_nArpeggiator = 0;
+		_nRandVelVariation = 0;
+		_bRandNoteStart = false;
+		_bRandNoteEnd = false;
+	}
+
 	// Arpeggiation enabled cancels: Randomized Note Positions., and Note Stagger.
 	if (_nArpeggiator)
 	{
@@ -332,6 +368,12 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 		_bRandNoteEnd = false;
 		_nNoteStagger = 0;
 	}
+
+	// Modify base velocity if random variation enabled.
+	if (_nVelocity - (_nRandVelVariation / 2) < 0)
+		_nVelocity = 5;
+	else
+		_nVelocity -= (_nRandVelVariation / 2);	// offset base velocity to allow for upward random variation.
 
 	if (_vChordNames.size() == 0)
 	{
@@ -407,13 +449,19 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (std::string filename, boo
 
 	GenerateNoteEvents();
 
-	SortNoteEventsAndFixOverlaps();
+	if (_bRandNoteStart || _bRandNoteEnd)
+		SortNoteEventsAndFixOverlaps();
+
+	if (_nNoteStagger)
+		ApplyNoteStagger();
 
 	if (_nArpeggiator)
 		ApplyArpeggiation();
 
-	if (_nRandVelVariation > 0)
-		ApplyRandomizedVelocity();
+	//if (_nRandVelVariation > 0)
+	//	ApplyRandomizedVelocity();
+
+	PushNoteEvents();
 
 	// Meta-event: End Of Track
 	PushVariableValue (0);
@@ -547,49 +595,121 @@ void CMIDIHandler::SortNoteEventsAndFixOverlaps()
 {
 	// If randomized note start/end applies, need to sort into event time order
 	// and fix any overlap errors introduced.
-	if (_bRandNoteStart || _bRandNoteEnd)
+	std::sort (_vMIDINoteEvents.begin(), _vMIDINoteEvents.end(),
+		[](MIDINote m1, MIDINote m2) { return (m1.nTime < m2.nTime);  }
+	);
+
+	// Parse all notes to correct instances of overlap as a result of
+	// the randomized note start/end. We may have introduced two
+	// consecutive ONs. For each note, it should be a strictly
+	// ON-OFF-ON-OFF sequence.
+	std::map<uint8_t, uint8_t> mNotesEncountered;
+	for each (auto note in _vMIDINoteEvents)
 	{
-		std::sort (_vMIDINoteEvents.begin(), _vMIDINoteEvents.end(),
-			[](MIDINote m1, MIDINote m2) { return (m1.nTime < m2.nTime);  }
-		);
-
-		// Parse all notes to correct instances of overlap as a result of
-		// the randomized note start/end. We may have introduced two
-		// consecutive ONs. For each note, it should be a strictly
-		// ON-OFF-ON-OFF sequence.
-		std::map<uint8_t, uint8_t> mNotesEncountered;
-		for each (auto note in _vMIDINoteEvents)
+		std::map<uint8_t, uint8_t>::iterator it;
+		it = mNotesEncountered.find (note.nKey);
+		if (it == mNotesEncountered.end())
 		{
-			std::map<uint8_t, uint8_t>::iterator it;
-			it = mNotesEncountered.find (note.nKey);
-			if (it == mNotesEncountered.end())
+			// First time for this note, so add it to our list.
+			mNotesEncountered.insert (std::pair<uint8_t, uint8_t>(note.nKey, note.nEvent));
+
+			// Now, for this note, look for all instances of it the list of MIDI notes events,
+			// and ensure that they go on, off, on, off...
+			bool bOn = true;
+			int i = -1;
+			for each (auto note1 in _vMIDINoteEvents)
 			{
-				// First time for this note, so add it to our list.
-				mNotesEncountered.insert (std::pair<uint8_t, uint8_t>(note.nKey, note.nEvent));
+				i++;
 
-				// Now, for this note, look for all instances of it the list of MIDI notes events,
-				// and ensure that they go on, off, on, off...
-				bool bOn = true;
-				int i = -1;
-				for each (auto note1 in _vMIDINoteEvents)
-				{
-					i++;
+				if (note1.nKey != note.nKey)
+					continue;
 
-					if (note1.nKey != note.nKey)
-						continue;
+				_vMIDINoteEvents[i].nEvent = ((uint8_t)(bOn ? EventName::NoteOn : EventName::NoteOff) | _nChannel);
 
-					_vMIDINoteEvents[i].nEvent = ((uint8_t)(bOn ? EventName::NoteOn : EventName::NoteOff) | _nChannel);
-
-					bOn = !bOn;
-				}
+				bOn = !bOn;
 			}
 		}
 	}
 }
 
+void CMIDIHandler::ApplyNoteStagger()
+{
+	SortChordNotes();
+
+	uint32_t nItem = 0;
+
+	while (nItem < _vMIDINoteEvents.size())
+	{
+		// Deal with each 'pair' of Chord Note Sets - one for Note On and one for Note Off.
+		//
+		// First: How many notes in the chord?
+		uint8_t nNumNotes = 0;
+		MIDINote note = _vMIDINoteEvents[nItem];
+		do
+		{
+			nNumNotes++;
+			nItem++;
+		} while (nItem < _vMIDINoteEvents.size() && _vMIDINoteEvents[nItem].nKey != note.nKey);
+		nItem -= nNumNotes;
+
+		uint32_t nStartTime = _vMIDINoteEvents[nItem].nTime;
+		uint8_t nOrigVel = _vMIDINoteEvents[nItem].nVel;
+
+		int8_t ns = _nNoteStagger;
+
+
+		// FunkStrum: Apply a stagger according to 1/16th notes.
+		// Ascending-note stagger for down strokes, descending-note stagger for up strokes.
+		uint8_t nVelAdjAmt = 0;
+		uint8_t nVel = nOrigVel;
+		if (_bFunkStrum)
+		{
+			nVelAdjAmt = 10;
+
+			bool bDownStroke = ((nStartTime / _ticksPer16th) % 2) == 0;
+			if (!bDownStroke)
+			{
+				// ie. Up Stroke
+				ns = -_nNoteStagger;
+
+				// Because the notes will be re-sorted as a result of the
+				// stagger, for Up Strokes we have to *increase* the
+				// velocity, so set an initial value.
+				nVel -= (nNumNotes - 1) * nVelAdjAmt;
+				nVelAdjAmt = -nVelAdjAmt;
+			}
+		}
+
+		// Negative stagger: Start from the highest note.
+		uint8_t nNoteStartOffset = 0;
+		if (ns < 0)
+			nNoteStartOffset = std::abs (ns) * (nNumNotes - 1);
+
+		std::vector<MIDINote>::iterator it;
+		for (uint8_t i = 0; i < nNumNotes; i++)
+		{
+			it = _vMIDINoteEvents.begin() + (nItem + i);
+			it->nTime += nNoteStartOffset;
+			nNoteStartOffset += ns;
+
+			// FunkStrum: Declining velocity.
+			it->nVel = nVel;
+			nVel -= nVelAdjAmt;
+		}
+
+		// Advance to next chord (pair)
+		nItem += (nNumNotes * 2);
+	}
+
+	// Another sort is required, to get everything in time order..
+	std::sort (_vMIDINoteEvents.begin(), _vMIDINoteEvents.end(),
+		[](MIDINote m1, MIDINote m2) { return (m1.nTime < m2.nTime);  }
+	);
+}
+
 void CMIDIHandler::ApplyArpeggiation()
 {
-	SortArpeggiatedChordNotes();
+	SortChordNotes();
 
 	uint32_t nSeq = 0;
 	uint32_t nItem = 0;
@@ -951,7 +1071,7 @@ void CMIDIHandler::ApplyArpeggiation()
 						// Overlap.
 						//
 						// Insert a Note Off event so that it sits before this n2 Note On event.
-						MIDINote nNew (n1.nSeq, n2.nTime, (uint8_t)EventName::NoteOff | _nChannel, n1.nKey);
+						MIDINote nNew (n1.nSeq, n2.nTime, (uint8_t)EventName::NoteOff | _nChannel, n1.nKey, 0);
 						_vMIDINoteEvents.insert (_vMIDINoteEvents.begin() + item2, nNew);
 						//
 						// Locate the next event for the this note, which should be a Note Off, and delete it.
@@ -981,9 +1101,9 @@ void CMIDIHandler::ApplyArpeggiation()
 	}
 }
 
-void CMIDIHandler::SortArpeggiatedChordNotes()
+void CMIDIHandler::SortChordNotes()
 {
-	// For the sake of arpeggiation...
+	// For the sake of Arpeggiation or Note Stagger...
 	// If downward transposition has occurred we must re-order the note such that,
 	// for each group with the same time, sort into ascending note order
 
@@ -1020,36 +1140,18 @@ void CMIDIHandler::SortArpeggiatedChordNotes()
 	_vMIDINoteEvents.assign (vTemp.begin(), vTemp.end());
 }
 
-void CMIDIHandler::ApplyRandomizedVelocity()
+void CMIDIHandler::PushNoteEvents()
 {
-	// Range for random velocity.
-	std::uniform_int_distribution<int> randVelVariation (0, _nRandVelVariation);
-	if (_nVelocity - (_nRandVelVariation / 2) < 0)
-		_nVelocity = 5;
-	else
-		_nVelocity -= (_nRandVelVariation / 2);	// offset base velocity to allow for upward random variation.
-
 	uint32_t nPrevNoteTime = 0;
 	for each (auto note in _vMIDINoteEvents)
 	{
-		// Lambda func to get random velocity variation
-		auto fnRandVel = [&]() {
-			uint8_t nRand = 0;
-			if (_nRandVelVariation > 0)
-				nRand = randVelVariation (_eng);
-			uint16_t nTemp = _nVelocity + nRand;
-			if (nTemp > 127)
-				nTemp = 127;
-			return (uint8_t)nTemp;
-		};
-
 		uint32_t nNoteTime = note.nTime;
 		uint32_t nDeltaTime = nNoteTime - nPrevNoteTime;
 
 		PushVariableValue (nDeltaTime);
 		PushInt8 (note.nEvent);
 		PushInt8 (note.nKey);
-		PushInt8 ((note.nEvent & 0xF0) == (uint8_t)EventName::NoteOn ? fnRandVel() : _nVelocityOff);
+		PushInt8 (note.nVel);
 
 		nPrevNoteTime = nNoteTime;
 	}
@@ -1059,36 +1161,53 @@ void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordN
 {
 	bNoteOn = !bNoteOn;
 
-	// set randomizer ranges
+	// Set randomizer ranges for note positions.
 	std::uniform_int_distribution<int> randNoteStartOffset (-_nRandNoteStartOffset, _nRandNoteStartOffset);
 	std::uniform_int_distribution<int> randNoteEndOffset (-_nRandNoteEndOffset, _nRandNoteEndOffset);
 
 	std::uniform_int_distribution<int> randNoteStartOffsetPositive (0, _nRandNoteStartOffset);
 	std::uniform_int_distribution<int> randNoteEndOffsetNegative (-_nRandNoteEndOffset, 0);
 
-	// Lambda funcs for randomizing note start/end
-	auto fnRandStart = [&](bool bPositiveOnly) {
+	// Range for random velocity.
+	std::uniform_int_distribution<int> randVelVariation (0, _nRandVelVariation);
+	
+	// Lambda funcs for randomizing note start/end.
+	auto fnRandStart = [&](bool bPositiveOnly)
+	{
 		int8_t nRand = 0;
 		if (_bRandNoteStart)
 			nRand = bPositiveOnly && _bRandNoteOffsetTrim ? randNoteStartOffsetPositive (_eng) : randNoteStartOffset (_eng);
 		return nRand;
 	};
-	auto fnRandEnd = [&](bool bNegativeOnly) {
+	auto fnRandEnd = [&](bool bNegativeOnly)
+	{
 		int8_t nRand = 0;
 		if (_bRandNoteEnd)
 			nRand = bNegativeOnly && _bRandNoteOffsetTrim ? randNoteEndOffsetNegative (_eng) : randNoteEndOffset (_eng);
 		return nRand;
 	};
 
+	// Lambda func to get random velocity variation.
+	auto fnRandVel = [&]() {
+		uint8_t nRand = 0;
+		if (_nRandVelVariation > 0)
+			nRand = randVelVariation (_eng);
+		uint16_t nTemp = _nVelocity + nRand;
+		if (nTemp > 127)
+			nTemp = 127;
+		return (uint8_t)nTemp;
+	};
+
 	std::vector<std::string> vChordIntervals;
 	uint8_t nRoot = 0;
 	GetChordIntervals (chordName, nRoot, vChordIntervals);
 
+
 	// Init note stagger offset. If value positive, start with lowest note; if negative,
 	// start from highest. First note itself is not staggered.
-	int8_t notePosOffset = -_nNoteStagger;
-	if (_nNoteStagger < 0)
-		notePosOffset = -_nNoteStagger * ((uint8_t)vChordIntervals.size() + 1 + (_bAddBassNote * 1));
+	int8_t notePosOffset = 0; // -_nNoteStagger;
+	//if (_nNoteStagger < 0)
+	//	notePosOffset = -_nNoteStagger * ((uint8_t)vChordIntervals.size() + 1 + (_bAddBassNote * 1));
 		
 	uint8_t nEventType = (bNoteOn ? (uint8_t)EventName::NoteOn : (uint8_t)EventName::NoteOff) | _nChannel;
 	uint32_t nET;
@@ -1096,29 +1215,22 @@ void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordN
 	// Optional extra bass note
 	if (_bAddBassNote)
 	{
-		if (_nNoteStagger && bNoteOn)
-			notePosOffset += _nNoteStagger;
-		else
-			notePosOffset = (bNoteOn ? fnRandStart (nNoteSeq == 0) : fnRandEnd (nNoteSeq == _nNoteCount));
+		notePosOffset = (bNoteOn ? fnRandStart (nNoteSeq == 0) : fnRandEnd (nNoteSeq == _nNoteCount));
 
 		nET = nEventTime + notePosOffset;
 		int16_t noteTemp = nRoot - 12;
 		if (noteTemp >= 0)
 		{
-			MIDINote note (nNoteSeq, nET, nEventType, nRoot - 12);
+			MIDINote note (nNoteSeq, nET, nEventType, nRoot - 12, fnRandVel());
 			_vMIDINoteEvents.push_back (note);
 		}
 	}
 
-
 	// Root note
-	if (_nNoteStagger && bNoteOn)
-		notePosOffset += _nNoteStagger;
-	else
-		notePosOffset = (bNoteOn ? fnRandStart (nNoteSeq == 0) : fnRandEnd (nNoteSeq == _nNoteCount));
+	notePosOffset = (bNoteOn ? fnRandStart (nNoteSeq == 0) : fnRandEnd (nNoteSeq == _nNoteCount));
 
 	nET = nEventTime + notePosOffset;
-	MIDINote note (nNoteSeq, nET, nEventType, nRoot);
+	MIDINote note (nNoteSeq, nET, nEventType, nRoot, fnRandVel());
 	_vMIDINoteEvents.push_back (note);
 
 	// Chord notes
@@ -1126,19 +1238,16 @@ void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordN
 	{
 		uint8_t nSemitones = std::stoi (item);
 
-		if (_nNoteStagger && bNoteOn)
-			notePosOffset += _nNoteStagger;
-		else
-			notePosOffset = (bNoteOn ? fnRandStart (nNoteSeq == 0) : fnRandEnd (nNoteSeq == _nNoteCount));
-
-		nET = nEventTime + notePosOffset;
-
 		// Downward transposition occurs if note is higher than highest-note threshold, or 127.
 		uint16_t nNote = nRoot + nSemitones;
 		while (nNote > (_nProvisionalLowestNote + _nTransposeThreshold) || nNote > 127)
 			nNote -= 12;
 
-		MIDINote note (nNoteSeq, nET, nEventType, (uint8_t)nNote);
+		notePosOffset = (bNoteOn ? fnRandStart (nNoteSeq == 0) : fnRandEnd (nNoteSeq == _nNoteCount));
+
+		nET = nEventTime + notePosOffset;
+
+		MIDINote note (nNoteSeq, nET, nEventType, (uint8_t)nNote, fnRandVel());
 		_vMIDINoteEvents.push_back (note);
 	};
 

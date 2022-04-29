@@ -38,6 +38,8 @@ public:
 	enum class StatusCode : uint16_t
 	{
 		Success,
+		ParameterValueMissing,
+		InvalidBassNoteValue,
 		NumberOfChordsDoesNotMatchNoteCount,
 		InvalidVelocityValue,
 		InvalidRandomVelocityVariationValue,
@@ -62,6 +64,7 @@ public:
 		StrayNotePositionLine,
 		InvalidLine,
 		NoChordsSpecified,
+		InvalidFunkStrumValue,
 		OutputFileAlreadyExists
 	};
 
@@ -78,9 +81,10 @@ public:
 private:
 	void GenerateNoteEvents();
 	void SortNoteEventsAndFixOverlaps();
+	void ApplyNoteStagger();
 	void ApplyArpeggiation();
-	void SortArpeggiatedChordNotes();
-	void ApplyRandomizedVelocity();
+	void SortChordNotes();
+	void PushNoteEvents();
 
 	void AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordName, bool& bNoteOn, uint32_t nEventTime);
 	int8_t NoteToMidi (std::string sNote, uint8_t& nNote, uint8_t& nSharpFlat);
@@ -113,11 +117,10 @@ private:
 	uint32_t _nOffset = 0;
 
 	uint16_t _ticksPerQtrNote = 96;
+	uint16_t _ticksPer16th;
 	uint16_t _ticksPer32nd;
 	uint16_t _ticksPerBar;
 	uint8_t _nChannel = 0;
-	uint8_t _nVelocity = 80;
-	uint8_t _nRandVelVariation = 0;
 	uint8_t _nVelocityOff = 0;
 	uint32_t _currentTime = 0;
 
@@ -125,6 +128,15 @@ private:
 	uint32_t _nVal32 = 0;
 	uint16_t _nVal16 = 0;
 	std::string _sText = "";
+
+	uint8_t _nVelocity = 80;
+	uint8_t _nRandVelVariation = 0;
+	bool _bAddBassNote = false;
+	uint8_t _nRandNoteStartOffset = 0;
+	uint8_t _nRandNoteEndOffset = 0;
+	bool _bRandNoteStart = false;
+	bool _bRandNoteEnd = false;
+	bool _bRandNoteOffsetTrim = false;
 
 	/*
 	The MIDI note event list (_vMIDINoteEvents), once populated and sorted is, in fact, a
@@ -143,21 +155,15 @@ private:
 		uint8_t nKey;
 		uint8_t nEvent;
 		uint32_t nSeq;
+		uint8_t nVel;
 
-		MIDINote() : nTime (0), nEvent ((uint8_t)EventName::NoteOn), nKey (60), nSeq (0) {}
-		MIDINote (uint32_t nSeq_, uint32_t nTime_, uint8_t nEvent_, uint8_t nKey_)
-			: nSeq (nSeq_), nTime (nTime_), nEvent (nEvent_), nKey (nKey_) {}
+		MIDINote() : nTime (0), nEvent ((uint8_t)EventName::NoteOn), nKey (60), nSeq (0), nVel (80) {}
+		MIDINote (uint32_t nSeq_, uint32_t nTime_, uint8_t nEvent_, uint8_t nKey_, uint8_t nVel_)
+			: nSeq (nSeq_), nTime (nTime_), nEvent (nEvent_), nKey (nKey_), nVel (nVel_) {}
 	};
 	std::vector<MIDINote> _vMIDINoteEvents;
 
 	std::vector<MIDINote> _vMIDINoteEvents2;
-
-	bool _bAddBassNote = false;
-	uint8_t _nRandNoteStartOffset = 0;
-	uint8_t _nRandNoteEndOffset = 0;
-	bool _bRandNoteStart = false;
-	bool _bRandNoteEnd = false;
-	bool _bRandNoteOffsetTrim = false;
 
 	int32_t _nNoteCount = -1;
 	int8_t _nNoteStagger = 0;
@@ -178,6 +184,8 @@ private:
 	uint32_t _nArpNoteTicks;
 	float _nArpGatePercent;
 	int8_t _nArpOctaveSteps = 0;	// Positive/negative values to transpose higher/lower
+
+	bool _bFunkStrum = false;
 
 	std::string _sTrackName = "Made by SMFFTI";
 
