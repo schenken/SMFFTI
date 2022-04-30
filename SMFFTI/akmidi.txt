@@ -30,7 +30,7 @@
 
 +BassNote=0
 
-+Velocity=70
++Velocity=100
 +RandVelVariation=20
 
 +RandNoteStartOffset=0
@@ -40,6 +40,8 @@
 +NoteStagger=0
 
 +FunkStrum=2
++FunkStrumUpStrokeAttenuation=0.75
++FunkStrumVelDeclineIncrement=10
 
 +OctaveRegister=3
 +TransposeThreshold=6
@@ -57,8 +59,8 @@ C, F
 
 
 [......|.......|.......|.......]
-+#+#+#+#
-C, C, F, F
++#+#+#+#+#+#    +#+#+#+#    +#+#
+Dm7, Dm7, Dm7, Dm7, Dm7, Dm7, G7, G7, G7, Dm7, Am7, Am7
 #)
 
 (#

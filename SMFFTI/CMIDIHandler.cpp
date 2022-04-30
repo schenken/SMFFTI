@@ -8,9 +8,7 @@ CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 	_ticksPer32nd = _ticksPerQtrNote / 8;
 	_ticksPerBar = _ticksPerQtrNote * 4;
 
-	_nArpTime = 8;	// 1/8th default
 	_nArpNoteTicks = _ticksPerBar / _nArpTime;
-	_nArpGatePercent = 0.5f;	// 50% default
 
 	_eng.seed (_rdev());
 }
@@ -24,6 +22,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 	uint8_t nDataLines = 0;
 	uint16_t nNumberOfNotes = 0;
 	int32_t nVal = 0;
+	double ndVal = 0.0;
 	uint32_t nLineNum = 0;
 	uint32_t nRulerLen = 0;
 	bool bCommentBlock = false;
@@ -300,6 +299,26 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_bFunkStrum = nVal > 0;
 				if (_bFunkStrum)
 					_nNoteStagger = nVal;
+				continue;
+			}
+			else if (vKeyValue[0] == "FunkStrumUpStrokeAttenuation")
+			{
+				if (!akl::VerifyDoubleInteger (vKeyValue[1], ndVal, 0.1, 1))
+				{
+					_sStatusMessage = "Invalid +FunkStrumUpStrokeAttenuation value (range 0.1 - 1.0).";
+					return StatusCode::InvalidFunkStrumUpStrokeAttenuationValue;
+				}
+				_nFunkStrumUpStrokeAttenuation = ndVal;
+				continue;
+			}
+			else if (vKeyValue[0] == "FunkStrumVelDeclineIncrement")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 20))
+				{
+					_sStatusMessage = "Invalid +FunkStrumVelDeclineIncrement value (range 0-20).";
+					return StatusCode::InvalidFunkStrumVelDeclineIncrementValue;
+				}
+				_nFunkStrumVelDeclineIncrement = nVal;
 				continue;
 			}
 			else
@@ -657,14 +676,13 @@ void CMIDIHandler::ApplyNoteStagger()
 
 		int8_t ns = _nNoteStagger;
 
-
 		// FunkStrum: Apply a stagger according to 1/16th notes.
 		// Ascending-note stagger for down strokes, descending-note stagger for up strokes.
 		uint8_t nVelAdjAmt = 0;
 		uint8_t nVel = nOrigVel;
 		if (_bFunkStrum)
 		{
-			nVelAdjAmt = 10;
+			nVelAdjAmt = _nFunkStrumVelDeclineIncrement;
 
 			bool bDownStroke = ((nStartTime / _ticksPer16th) % 2) == 0;
 			if (!bDownStroke)
@@ -674,7 +692,9 @@ void CMIDIHandler::ApplyNoteStagger()
 
 				// Because the notes will be re-sorted as a result of the
 				// stagger, for Up Strokes we have to *increase* the
-				// velocity, so set an initial value.
+				// velocity, so set an initial value. Up strokes also might
+				// have less velocity as they're not always struck so hard?
+				nVel = (uint8_t)(nVel * _nFunkStrumUpStrokeAttenuation);
 				nVel -= (nNumNotes - 1) * nVelAdjAmt;
 				nVelAdjAmt = -nVelAdjAmt;
 			}

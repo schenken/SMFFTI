@@ -65,6 +65,8 @@ public:
 		InvalidLine,
 		NoChordsSpecified,
 		InvalidFunkStrumValue,
+		InvalidFunkStrumUpStrokeAttenuationValue,
+		InvalidFunkStrumVelDeclineIncrementValue,
 		OutputFileAlreadyExists
 	};
 
@@ -180,12 +182,14 @@ private:
 
 	// Arp stuff
 	uint32_t _nArpeggiator = 0;
-	uint32_t _nArpTime;
+	uint32_t _nArpTime = 8;	// 1/8th default
 	uint32_t _nArpNoteTicks;
-	float _nArpGatePercent;
+	float _nArpGatePercent = 0.5f;
 	int8_t _nArpOctaveSteps = 0;	// Positive/negative values to transpose higher/lower
 
 	bool _bFunkStrum = false;
+	double _nFunkStrumUpStrokeAttenuation = 1.0;
+	uint8_t _nFunkStrumVelDeclineIncrement = 5;
 
 	std::string _sTrackName = "Made by SMFFTI";
 

@@ -122,13 +122,58 @@ bool VerifyTextInteger (std::string sNum, int32_t& nReturnValue, int32_t nFrom, 
 			if (!std::all_of (sNum.begin(), sNum.end(), ::isdigit))
 				return false;
 		}
-
-		//if (!std::all_of (sNum.begin(), sNum.end(), [](char c) {return ::isdigit(c) || c == '-'; }))
-		//	return false;
 	}
 
 	try {
 		nReturnValue = std::stoi (sNum);
+	}
+	catch (std::invalid_argument & e) {
+		// if no conversion could be performed
+		e;
+		bOK = false;
+	}
+	catch (...) {
+		// everything else
+		bOK = false;
+	}
+
+	if (nReturnValue < nFrom || nReturnValue > nTo)
+	{
+		nReturnValue = 0;
+		bOK = false;
+	}
+
+	return bOK;
+}
+
+bool VerifyDoubleInteger (std::string sNum, double& nReturnValue, double nFrom, double nTo)
+{
+	bool bOK = true;
+
+	nReturnValue = 0.0;
+
+	if (sNum.size() == 0)
+		return false;
+
+	if (nFrom >= 0 && !std::all_of (sNum.begin(), sNum.end(), [](char c) { return ::isdigit (c) || c == '.'; }))
+		return false;
+
+	if (nFrom < 0)
+	{
+		// Negative min value allowed
+		int n = 0;
+		if (sNum[0] == '-')
+			n = 1;
+		if (!std::all_of (sNum.begin() + n, sNum.end(), [](char c) { return ::isdigit (c) || c == '.'; }))
+			return false;
+	}
+
+	// Only a single decimal point
+	if (std::count (sNum.begin(), sNum.end(), '.') > 1)
+		return false;
+
+	try {
+		nReturnValue = std::stod (sNum);
 	}
 	catch (std::invalid_argument & e) {
 		// if no conversion could be performed
