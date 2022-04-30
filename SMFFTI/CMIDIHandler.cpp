@@ -118,16 +118,48 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			{
 				std::vector<std::string> vChordIntervals;
 				uint8_t nRoot = 0;
-				if (!GetChordIntervals (c, nRoot, vChordIntervals))
+
+				// Lambda func to check for chord repeater, ie. chord names suffixed with a number
+				// in parentheses, eg. Cm(3). Where found, the number value is given back.
+				// (Max 16 repeats allowed.)
+				auto ChordRepeat = [](std::string s, uint8_t& nNum)
+				{
+					size_t n = s.find ('(');
+					size_t n1 = s.find (')');
+					if (n != std::string::npos)
+						if (n1 != std::string::npos)
+							if (n > 0 && n1 == s.size() - 1 && (n1 - n > 1))
+								if (std::all_of (s.begin() + n + 1, s.begin() + n1 - 1, ::isdigit))
+								{
+									int32_t nTemp;
+									if (akl::VerifyTextInteger (s.substr (n + 1, (n1 - 1) - n), nTemp, 1, 16))
+									{
+										nNum = nTemp;
+										return true;
+									}
+								}
+
+					return false;
+				};
+
+				uint8_t nNumInstances = 1;
+				std::string sChordName = c;
+
+				if (ChordRepeat (c, nNumInstances))
+					sChordName = c.substr (0, c.find ('('));
+
+				if (!GetChordIntervals (sChordName, nRoot, vChordIntervals))
 				{
 					std::ostringstream ss;
-					ss << "Line " << nLineNum << ": Invalid/blank chord name: " << c;
+					ss << "Line " << nLineNum << ": Invalid/blank chord name: " << sChordName;
 					_sStatusMessage = ss.str();
 					return StatusCode::InvalidOrBlankChordName;
 				}
+
+				for (uint8_t i = 0; i < nNumInstances; i++)
+					_vChordNames.push_back (sChordName);
 			}
 
-			_vChordNames.insert (_vChordNames.end(), v.begin(), v.end());
 			nDataLines = 0;
 			continue;
 		}
