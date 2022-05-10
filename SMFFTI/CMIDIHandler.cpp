@@ -26,6 +26,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 	uint32_t nLineNum = 0;
 	uint32_t nRulerLen = 0;
 	bool bCommentBlock = false;
+	bool bRandomGroove = false;
 
 	for each (auto sLine in _vInput)
 	{
@@ -67,9 +68,73 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				return StatusCode::BlankNotePositions;
 			}
 
+			if (sNotePositions == "random")
+			{
+				// Randomly construct the note positions by building a
+				// string something like "+### +#   +### +#"/
+
+				bRandomGroove = true;
+
+				// Init for dynamic construction.
+				sNotePositions = "";
+
+				// Get the current number of bars to populate.
+				uint32_t nNumBars = _vBarCount.back();
+
+				// Lambda func to return random note length
+				auto RandNoteLen = [](std::vector<int> v, size_t& nNum16ths)
+				{
+					// Note length:
+					// 0 = off, 1 = 1/16th, 2 = 1/8th, 3 = 3/8ths, 4 = 1/4
+					std::uniform_int_distribution<size_t> randNoteLen (0, v.size() - 1);
+					nNum16ths = v[randNoteLen (_eng)];
+					std::string x = "  ";	// blank 1/16th
+					if (nNum16ths > 0)
+						x = std::string ("+#######").substr (0, nNum16ths * 2);
+					else
+						nNum16ths = 1;	// for blank note still must register a 1/16th note
+					return x;
+				};
+
+				// Iterate in 1/16th increments
+				uint32_t nNum16ths = nNumBars * 16;
+				std::string sNoteLen;
+				size_t nNoteLen16ths = 0;
+				size_t i = 0;
+				while (i < nNum16ths)
+				{
+					if (i % 4 == 0)
+					{
+						// 1/4 note position
+						// We pass in a weighted list - favours shorter length
+						sNoteLen = RandNoteLen ({ 0, 0, 1, 1, 2, 2, 3, 4 }, nNoteLen16ths);	// any of the note lengths
+						int ak = 1;
+					}
+					else if (i % 2 == 0)
+					{
+						// 1/8th note position
+						sNoteLen = RandNoteLen ({ 0, 0, 1, 1, 2 }, nNoteLen16ths);	// Off, 1/16th, 1/8th or 3/8ths
+						int ak = 1;
+					}
+					else
+					{
+						// Odd-numbered 1/16th note position,
+						// ie. an upstroke.
+						sNoteLen = RandNoteLen ({ 0, 1 }, nNoteLen16ths);		// Off or 1/16th
+						int ak = 1;
+					}
+
+					sNotePositions += sNoteLen;
+					i += nNoteLen16ths;	// advance counter according to determined note len.
+					int ak = 1;
+				}
+
+				//return StatusCode::Success;
+			}
+
 			// Check we've only got spaces, pluses or hashes.
-			bool res = std::all_of (sNotePositions.begin(), sNotePositions.end(), 
-				[](char c) { return c == ' ' || c == '+' || c == '#' ; });
+			bool res = std::all_of (sNotePositions.begin(), sNotePositions.end(),
+				[](char c) { return c == ' ' || c == '+' || c == '#'; });
 
 			if (res == false) {
 				std::ostringstream ss;
@@ -112,6 +177,22 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				ss << "Line " << nLineNum << ": Missing chord list.";
 				_sStatusMessage = ss.str();
 				return StatusCode::MissingChordList;
+			}
+
+			if (bRandomGroove)
+			{
+				// We expect only one chord, and set a repeat value
+				// according to the randomly-generated note position
+				// string just created.
+
+				std::string sNotePositions = _vNotePositions.back();
+				size_t n = std::count (sNotePositions.begin(), sNotePositions.end(), '+');
+
+				std::ostringstream ss;
+				ss << v[0] << "(" << n << ")";
+				v[0] = ss.str();
+
+				int ak = 1;
 			}
 
 			for each (auto c in v)
@@ -576,76 +657,71 @@ void CMIDIHandler::GenerateNoteEvents()
 			std::string s2 (s);
 			std::transform (s2.begin(), s2.end(), s2.begin(), ::toupper);
 
-			if (s2 == "BLANK")
-			{ }
-			else
+			for each (auto c in s)
 			{
-				for each (auto c in s)
+				// Each string here represents 2 bars
+				if (c == '+')
 				{
-					// Each string here represents 2 bars
-					if (c == '+')
-					{
-						nNote++;
+					nNote++;
 
-						// start of note
-						if (!bNoteOn)
-						{
-							if (i == 0)
-								bNoteOn = !bNoteOn;
-							else
-								AddMIDIChordNoteEvents (++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
-						}
+					// start of note
+					if (!bNoteOn)
+					{
+						if (i == 0)
+							bNoteOn = !bNoteOn;
 						else
-						{
-							// Another note detected without a gap from previous note,
-							// so insert a Note Off first.
-							if (i == 1)
-							{
-								AddMIDIChordNoteEvents (nChordPair, _vChordNames[nPrevNote], bNoteOn, pos32nds * _ticksPer32nd);
-								AddMIDIChordNoteEvents (++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
-							}
-						}
-					}
-					else if (c == '#')
-					{
-						if (!bNoteOn)
-						{
-							// Consider this as repeat of the last chord
-							if (i == 0)
-								bNoteOn = !bNoteOn;
-							else
-								AddMIDIChordNoteEvents (++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
-
-							if (i == 0)
-							{
-								std::string sNote = _vChordNames[nNote];
-								_vChordNames.insert (_vChordNames.begin() + nNote, sNote);
-							}
-
-							nNote++;
-						}
+							AddMIDIChordNoteEvents (++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
 					}
 					else
 					{
-						// end of note
-						if (bNoteOn)
-							if (i == 0)
-								bNoteOn = !bNoteOn;
-							else
-								AddMIDIChordNoteEvents (nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
+						// Another note detected without a gap from previous note,
+						// so insert a Note Off first.
+						if (i == 1)
+						{
+							AddMIDIChordNoteEvents (nChordPair, _vChordNames[nPrevNote], bNoteOn, pos32nds * _ticksPer32nd);
+							AddMIDIChordNoteEvents (++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
+						}
 					}
+				}
+				else if (c == '#')
+				{
+					if (!bNoteOn)
+					{
+						// Consider this as repeat of the last chord
+						if (i == 0)
+							bNoteOn = !bNoteOn;
+						else
+							AddMIDIChordNoteEvents (++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
 
-					pos32nds++;
-					nPrevNote = nNote;
+						if (i == 0)
+						{
+							std::string sNote = _vChordNames[nNote];
+							_vChordNames.insert (_vChordNames.begin() + nNote, sNote);
+						}
+
+						nNote++;
+					}
+				}
+				else
+				{
+					// end of note
+					if (bNoteOn)
+						if (i == 0)
+							bNoteOn = !bNoteOn;
+						else
+							AddMIDIChordNoteEvents (nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
 				}
 
-				// final end of note
-				if (bNoteOn)
-					if (i == 0)
-						bNoteOn = !bNoteOn;
-					else
-						AddMIDIChordNoteEvents (nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
+				pos32nds++;
+				nPrevNote = nNote;
 			}
+
+			// final end of note
+			if (bNoteOn)
+				if (i == 0)
+					bNoteOn = !bNoteOn;
+				else
+					AddMIDIChordNoteEvents (nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
 
 			// move pointer 4 bars forward
 			if (i == 1)
@@ -1229,6 +1305,13 @@ void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordN
 {
 	bNoteOn = !bNoteOn;
 
+	if (!bNoteOn && _bFunkStrum)
+	{
+		// FunkStrum: Shorten the note slightly, to prevent
+		// funk notes running into each other.
+		nEventTime -= 3;
+	}
+
 	// Set randomizer ranges for note positions.
 	std::uniform_int_distribution<int> randNoteStartOffset (-_nRandNoteStartOffset, _nRandNoteStartOffset);
 	std::uniform_int_distribution<int> randNoteEndOffset (-_nRandNoteEndOffset, _nRandNoteEndOffset);
@@ -1273,9 +1356,7 @@ void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordN
 
 	// Init note stagger offset. If value positive, start with lowest note; if negative,
 	// start from highest. First note itself is not staggered.
-	int8_t notePosOffset = 0; // -_nNoteStagger;
-	//if (_nNoteStagger < 0)
-	//	notePosOffset = -_nNoteStagger * ((uint8_t)vChordIntervals.size() + 1 + (_bAddBassNote * 1));
+	int8_t notePosOffset = 0;
 		
 	uint8_t nEventType = (bNoteOn ? (uint8_t)EventName::NoteOn : (uint8_t)EventName::NoteOff) | _nChannel;
 	uint32_t nET;
@@ -1341,7 +1422,6 @@ int8_t CMIDIHandler::NoteToMidi (std::string sNote, uint8_t& nNote, uint8_t& nSh
 		return -1;
 
 	uint8_t nNote2 = it->second;
-
 
 	// Middle C is always MIDI note number 60, but manufacturers can decide their
 	// own ranges. Ableton Live sets Middle C as C3.
@@ -1487,7 +1567,8 @@ CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 	_mChordTypes.insert (std::pair<std::string, std::string>("sus2",	"2,7"));
 	_mChordTypes.insert (std::pair<std::string, std::string>("7sus2",	"2,7,10"));
 	_mChordTypes.insert (std::pair<std::string, std::string>("sus4",	"5,7"));
-	_mChordTypes.insert (std::pair<std::string, std::string>("7sus4",	"5,7,10"));
+	_mChordTypes.insert (std::pair<std::string, std::string>("7sus4",   "5,7,10"));
+	_mChordTypes.insert (std::pair<std::string, std::string>("5",       "7"));				// Power chord
 
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("C", 0));
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("C#", 1));
