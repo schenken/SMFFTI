@@ -73,6 +73,8 @@ public:
 
 	CMIDIHandler (std::string sInputFile);
 
+	StatusCode CreateRandomFunkGrooveMIDICommandFile (std::string sOutFile, bool bOverwriteOutFile);
+
 	StatusCode Verify();	// Load command file and check content is valid.
 
 	// Whack out a dead simple MIDI file. Single track with just a few notes.
@@ -82,6 +84,7 @@ public:
 
 
 private:
+	std::string GetRandomGroove (bool& bRandomGroove);
 	void GenerateNoteEvents();
 	void SortNoteEventsAndFixOverlaps();
 	void ApplyNoteStagger();

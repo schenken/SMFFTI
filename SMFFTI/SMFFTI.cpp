@@ -43,17 +43,7 @@ int main (int argc, char* argv[])
                 return 1;
             }
 
-            std::string sMIDICommandFile (argv[1]);
-            std::ifstream ifs (sMIDICommandFile, std::fstream::in);
-            if (!ifs.is_open())
-            {
-                PrintError ("Unable to open input file.");
-                return 1;
-            }
-
-            std::string sOutputMIDIFile (argv[2]);
-
-            DoStuff (argc, argv, sMIDICommandFile, sOutputMIDIFile);
+            DoStuff (argc, argv);
         }
     }
     else
@@ -66,7 +56,7 @@ int main (int argc, char* argv[])
     return nRetCode;
 }
 
-void DoStuff (int argc, char* argv[], const std::string& sInFile, const std::string sOutFile)
+void DoStuff (int argc, char* argv[])
 {
     bool bOverwriteOutFile = false;
     if (argc > 3)
@@ -81,6 +71,29 @@ void DoStuff (int argc, char* argv[], const std::string& sInFile, const std::str
             }
         }
     }
+
+    // Random Funk Groove: -rfg switch
+    // We generate a input MIDI command file.
+    if (std::string (argv[1]) == "-rfg")
+    {
+        std::string sOutFile (argv[2]);
+        CMIDIHandler midiH ("");
+        if (midiH.CreateRandomFunkGrooveMIDICommandFile (sOutFile, bOverwriteOutFile) != CMIDIHandler::StatusCode::Success)
+        {
+            PrintError (midiH.GetStatusMessage());
+        }
+        return;
+    }
+
+    std::string sInFile (argv[1]);
+    std::ifstream ifs (sInFile, std::fstream::in);
+    if (!ifs.is_open())
+    {
+        PrintError ("Unable to open input file.");
+        return;
+    }
+
+    std::string sOutFile (argv[2]);
 
     CMIDIHandler midiH (sInFile);
 
@@ -105,13 +118,18 @@ void PrintUsage()
         "Simple MIDI Files From Text Input (SMFFTI)\n"
         "------------------------------------------\n\n"
 
-        "Usage:\n\n"
+        "Usage 1 - Create MIDI file from text command file:\n\n"
 
         "    SMFFTI.exe <infile> <outfile>\n\n"
 
         "where <infile> is a text file containing instructions and directives\n"
         "and <outfile> is the name of the MIDI file (.mid) to create.\n\n"
 
+        "Usage 2 - Generate Random Funk Groove text command file:\n\n"
+
+        "    SMFFTI.exe -rfg <outfile>\n\n"
+
+        "where <outfile> is the name of the text command file.\n\n"
         ;
 
     printf (text);

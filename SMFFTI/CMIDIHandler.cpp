@@ -13,6 +13,88 @@ CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 	_eng.seed (_rdev());
 }
 
+CMIDIHandler::StatusCode CMIDIHandler::CreateRandomFunkGrooveMIDICommandFile (std::string sOutFile, bool bOverwriteOutFile)
+{
+	StatusCode result = StatusCode::Success;
+
+	bool bRandomGroove = true;	// dummy value - not used
+
+	_vBarCount.push_back (1);
+
+	if (!bOverwriteOutFile && akl::MyFileExists (sOutFile))
+	{
+		std::ostringstream ss;
+		ss << "Output file already exists. Use the -o switch to overwrite, eg:\n"
+			<< "SMFFTI.exe midicmds.txt MyMIDIFile.mid -o";
+		_sStatusMessage = ss.str();
+		return StatusCode::OutputFileAlreadyExists;
+	}
+
+	std::vector<std::string> vChords;
+	vChords.push_back ("Em7");
+	vChords.push_back ("Em7");
+	vChords.push_back ("Bm7");
+	vChords.push_back ("Am7");
+	vChords.push_back ("Dm7");
+	vChords.push_back ("Dm7");
+	vChords.push_back ("Bm7");
+	vChords.push_back ("Am7");
+
+	std::vector<std::string> vNotePositions;
+	for (size_t i = 0; i < 8; i++)
+	{
+		std::string sGroove = GetRandomGroove (bRandomGroove);
+		vNotePositions.push_back (sGroove);
+
+		size_t n = std::count (sGroove.begin(), sGroove.end(), '+');
+		std::ostringstream ss;
+		ss << vChords[i] << "(" << n << ")";
+		vChords[i] = ss.str();
+	}
+
+	std::ofstream ofs (sOutFile, std::ios::binary);
+
+	std::ostringstream ss;
+
+	ss <<
+
+		"+TrackName=Random Funk Groove (" << sOutFile << ")\n"
+		"+BassNote=0\n"
+		"+Velocity=80\n"
+		"+RandVelVariation=0\n"
+		"+RandNoteStartOffset=0\n"
+		"+RandNoteEndOffset=0\n"
+		"+RandNoteOffsetTrim=1\n"
+		"+NoteStagger=0\n"
+		"+OctaveRegister=3\n"
+		"+TransposeThreshold=11\n"
+		"+Arpeggiator=0\n"
+		"+ArpTime=16\n"
+		"+ArpGatePercent=100\n"
+		"+ArpOctaveSteps=1\n\n"
+
+		"+FunkStrum=2\n"
+		"+FunkStrumUpStrokeAttenuation=0.5\n"
+		"+FunkStrumVelDeclineIncrement=8\n\n"
+
+		;
+
+		for (size_t i = 0; i < vChords.size(); i++)
+		{
+			ss <<
+				"[......|.......|.......|.......]\n"
+				<< vNotePositions[i] << "\n"
+				<< vChords[i] << "\n\n"
+				;
+		}
+
+	ofs << ss.str();
+
+	ofs.close();
+
+	return result;
+}
+
 CMIDIHandler::StatusCode CMIDIHandler::Verify()
 {
 	StatusCode result = StatusCode::Success;
@@ -68,69 +150,10 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				return StatusCode::BlankNotePositions;
 			}
 
-			if (sNotePositions == "random")
-			{
-				// Randomly construct the note positions by building a
-				// string something like "+### +#   +### +#"/
-
-				bRandomGroove = true;
-
-				// Init for dynamic construction.
-				sNotePositions = "";
-
-				// Get the current number of bars to populate.
-				uint32_t nNumBars = _vBarCount.back();
-
-				// Lambda func to return random note length
-				auto RandNoteLen = [](std::vector<int> v, size_t& nNum16ths)
-				{
-					// Note length:
-					// 0 = off, 1 = 1/16th, 2 = 1/8th, 3 = 3/8ths, 4 = 1/4
-					std::uniform_int_distribution<size_t> randNoteLen (0, v.size() - 1);
-					nNum16ths = v[randNoteLen (_eng)];
-					std::string x = "  ";	// blank 1/16th
-					if (nNum16ths > 0)
-						x = std::string ("+#######").substr (0, nNum16ths * 2);
-					else
-						nNum16ths = 1;	// for blank note still must register a 1/16th note
-					return x;
-				};
-
-				// Iterate in 1/16th increments
-				uint32_t nNum16ths = nNumBars * 16;
-				std::string sNoteLen;
-				size_t nNoteLen16ths = 0;
-				size_t i = 0;
-				while (i < nNum16ths)
-				{
-					if (i % 4 == 0)
-					{
-						// 1/4 note position
-						// We pass in a weighted list - favours shorter length
-						sNoteLen = RandNoteLen ({ 0, 0, 1, 1, 2, 2, 3, 4 }, nNoteLen16ths);	// any of the note lengths
-						int ak = 1;
-					}
-					else if (i % 2 == 0)
-					{
-						// 1/8th note position
-						sNoteLen = RandNoteLen ({ 0, 0, 1, 1, 2 }, nNoteLen16ths);	// Off, 1/16th, 1/8th or 3/8ths
-						int ak = 1;
-					}
-					else
-					{
-						// Odd-numbered 1/16th note position,
-						// ie. an upstroke.
-						sNoteLen = RandNoteLen ({ 0, 1 }, nNoteLen16ths);		// Off or 1/16th
-						int ak = 1;
-					}
-
-					sNotePositions += sNoteLen;
-					i += nNoteLen16ths;	// advance counter according to determined note len.
-					int ak = 1;
-				}
-
-				//return StatusCode::Success;
-			}
+			// RandomGroove works for all parameters, but is designed
+			// primarily for +FunkStrum.
+			if (sNotePositions == "RandomGroove")
+				sNotePositions = GetRandomGroove (bRandomGroove);
 
 			// Check we've only got spaces, pluses or hashes.
 			bool res = std::all_of (sNotePositions.begin(), sNotePositions.end(),
@@ -626,6 +649,70 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (std::string filename, boo
 	ofs.close();
 
 	return nRes;
+}
+
+std::string CMIDIHandler::GetRandomGroove (bool& bRandomGroove)
+{
+	// Randomly construct the note positions by building a
+	// string something like "+### +#   +### +#".
+
+	// Init for dynamic construction.
+	std::string sNotePositions;
+
+	// Get the current number of bars to populate.
+	uint32_t nNumBars = _vBarCount.back();
+
+	// Lambda func to return random note length
+	auto RandNoteLen = [](std::vector<int> v, size_t& nNum16ths)
+	{
+		// Note length:
+		// 0 = off, 1 = 1/16th, 2 = 1/8th, 3 = 3/8ths, 4 = 1/4
+		std::uniform_int_distribution<size_t> randNoteLen (0, v.size() - 1);
+		nNum16ths = v[randNoteLen (_eng)];
+		std::string x = "  ";	// blank 1/16th
+		if (nNum16ths > 0)
+			x = std::string ("+#######").substr (0, nNum16ths * 2);
+		else
+			nNum16ths = 1;	// for blank note still must register a 1/16th note
+		return x;
+	};
+
+	// Iterate in 1/16th increments
+	uint32_t nNum16ths = nNumBars * 16;
+	std::string sNoteLen;
+	size_t nNoteLen16ths = 0;
+	size_t i = 0;
+	while (i < nNum16ths)
+	{
+		if (i % 4 == 0)
+		{
+			// 1/4 note position
+			// We pass in a weighted list - favours shorter length
+			sNoteLen = RandNoteLen ({ 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 4 }, nNoteLen16ths);	// any of the note lengths
+			int ak = 1;
+		}
+		else if (i % 2 == 0)
+		{
+			// 1/8th note position
+			sNoteLen = RandNoteLen ({ 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2 }, nNoteLen16ths);	// Off, 1/16th, 1/8th or 3/8ths
+			int ak = 1;
+		}
+		else
+		{
+			// Odd-numbered 1/16th note position,
+			// ie. an upstroke.
+			sNoteLen = RandNoteLen ({ 0, 0, 0, 0, 0, 1, 1, 1, 1 }, nNoteLen16ths);		// Off or 1/16th
+			int ak = 1;
+		}
+
+		sNotePositions += sNoteLen;
+		i += nNoteLen16ths;	// advance counter according to determined note len.
+		int ak = 1;
+	}
+
+	bRandomGroove = true;
+
+	return sNotePositions;
 }
 
 void CMIDIHandler::GenerateNoteEvents()
