@@ -67,6 +67,7 @@ public:
 		InvalidFunkStrumValue,
 		InvalidFunkStrumUpStrokeAttenuationValue,
 		InvalidFunkStrumVelDeclineIncrementValue,
+		MaxFourBarsPerLine,
 		OutputFileAlreadyExists
 	};
 
@@ -93,10 +94,10 @@ private:
 
 	bool GetChordIntervals (std::string sChordName, uint8_t& nRoot, std::vector<std::string>& vChordIntervals);
 
-	uint32_t Swap32 (uint32_t n);
-	uint16_t Swap16 (uint16_t n);
+	uint32_t Swap32 (uint32_t n) const;
+	uint16_t Swap16 (uint16_t n) const;
 
-	std::string BitString (uint32_t n, uint32_t numBits);
+	std::string BitString (uint32_t n, uint32_t numBits) const;
 		
 	// Convert 32-bit integer to the MIDI "variable length" value and append to buffer.
 	void PushVariableValue (uint32_t n);

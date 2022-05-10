@@ -132,7 +132,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 								if (std::all_of (s.begin() + n + 1, s.begin() + n1 - 1, ::isdigit))
 								{
 									int32_t nTemp;
-									if (akl::VerifyTextInteger (s.substr (n + 1, (n1 - 1) - n), nTemp, 1, 16))
+									if (akl::VerifyTextInteger (s.substr (n + 1, (n1 - 1) - n), nTemp, 1, 128))
 									{
 										nNum = nTemp;
 										return true;
@@ -265,8 +265,6 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 					return StatusCode::InvalidOctaveRegisterValue;
 				}
 				_sOctaveRegister = vKeyValue[1];
-				uint8_t nSharpFlat = 0;
-				int8_t res = NoteToMidi ("C" + _sOctaveRegister, _nProvisionalLowestNote, nSharpFlat);
 			}
 			else if (vKeyValue[0] == "TransposeThreshold")
 			{
@@ -391,6 +389,14 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 			}
 
+			if (nNumBars > 4)
+			{
+				std::ostringstream ss;
+				ss << "Line " << nLineNum << ": Maximum of 4 bars per line.";
+				_sStatusMessage = ss.str();
+				return StatusCode::MaxFourBarsPerLine;
+			}
+
 			_vBarCount.push_back (nNumBars);
 
 			nDataLines++;
@@ -403,7 +409,17 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 		return StatusCode::InvalidLine;
 	}
 
-	// FunkStrum cancels: Arp, Random Velocity and Random Note Positions.
+	uint8_t nSharpFlat = 0;
+	int8_t res = NoteToMidi ("C" + _sOctaveRegister, _nProvisionalLowestNote, nSharpFlat);
+
+	// NoteStagger cancels randomized note positions.
+	if (_nNoteStagger)
+	{
+		_bRandNoteStart = false;
+		_bRandNoteEnd = false;
+	}
+
+	// FunkStrum cancels: Arp, randomized velocity and randomized note positions.
 	if (_bFunkStrum)
 	{
 		_nArpeggiator = 0;
@@ -412,7 +428,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 		_bRandNoteEnd = false;
 	}
 
-	// Arpeggiation enabled cancels: Randomized Note Positions., and Note Stagger.
+	// Arpeggiation enabled cancels: randomized note positions., and note stagger.
 	if (_nArpeggiator)
 	{
 		_bRandNoteStart = false;
@@ -710,8 +726,8 @@ void CMIDIHandler::ApplyNoteStagger()
 
 		// FunkStrum: Apply a stagger according to 1/16th notes.
 		// Ascending-note stagger for down strokes, descending-note stagger for up strokes.
-		uint8_t nVelAdjAmt = 0;
-		uint8_t nVel = nOrigVel;
+		int16_t nVelAdjAmt = 0;
+		int16_t nVel = nOrigVel;
 		if (_bFunkStrum)
 		{
 			nVelAdjAmt = _nFunkStrumVelDeclineIncrement;
@@ -727,7 +743,7 @@ void CMIDIHandler::ApplyNoteStagger()
 				// velocity, so set an initial value. Up strokes also might
 				// have less velocity as they're not always struck so hard?
 				nVel = (uint8_t)(nVel * _nFunkStrumUpStrokeAttenuation);
-				nVel -= (nNumNotes - 1) * nVelAdjAmt;
+				nVel -= (std::min)((nNumNotes - 1) * nVelAdjAmt, nVel - 1);
 				nVelAdjAmt = -nVelAdjAmt;
 			}
 		}
@@ -745,7 +761,7 @@ void CMIDIHandler::ApplyNoteStagger()
 			nNoteStartOffset += ns;
 
 			// FunkStrum: Declining velocity.
-			it->nVel = nVel;
+			it->nVel = (uint8_t)nVel;
 			nVel -= nVelAdjAmt;
 		}
 
@@ -1170,7 +1186,7 @@ void CMIDIHandler::SortChordNotes()
 			&& _vMIDINoteEvents[itemLast].nTime == _vMIDINoteEvents[itemFirst].nTime
 			&& _vMIDINoteEvents[itemLast].nEvent == _vMIDINoteEvents[itemFirst].nEvent)
 			itemLast++;
-		for (uint8_t i = itemFirst; i < itemLast; i++)
+		for (uint32_t i = itemFirst; i < itemLast; i++)
 		{
 			MIDINote note = _vMIDINoteEvents[i];
 			mTemp.insert (std::pair<uint8_t, MIDINote> (note.nKey, note));
@@ -1380,17 +1396,17 @@ bool CMIDIHandler::GetChordIntervals (std::string sChordName, uint8_t& nRoot, st
 
 
 
-uint32_t CMIDIHandler::Swap32 (uint32_t n)
+uint32_t CMIDIHandler::Swap32 (uint32_t n) const
 {
 	return (((n >> 24) & 0xff) | ((n << 8) & 0xff0000) | ((n >> 8) & 0xff00) | ((n << 24) & 0xff000000));
 };
 
-uint16_t CMIDIHandler::Swap16 (uint16_t n)
+uint16_t CMIDIHandler::Swap16 (uint16_t n) const
 {
 	return ((n >> 8) | (n << 8));
 };
 
-std::string CMIDIHandler::BitString (uint32_t n, uint32_t numBits)
+std::string CMIDIHandler::BitString (uint32_t n, uint32_t numBits) const
 {
 	std::string x;
 	for (int i = numBits - 1; i >= 0; i--)
@@ -1430,7 +1446,8 @@ void CMIDIHandler::PushVariableValue (uint32_t nVal)
 	int ak = 1;
 };
 
-void CMIDIHandler::PushInt8 (uint8_t n) {
+void CMIDIHandler::PushInt8 (uint8_t n)
+{
 	_vTrackBuf.push_back (n);
 	_nOffset++;
 }
@@ -1457,15 +1474,16 @@ CMIDIHandler::ClassMemberInit CMIDIHandler::cmi;
 
 CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 {
-	_mChordTypes.insert (std::pair<std::string, std::string>("maj",		"4,7"));
-	_mChordTypes.insert (std::pair<std::string, std::string>("maj7",	"4,7,11"));
-	_mChordTypes.insert (std::pair<std::string, std::string>("maj9",	"4,7,11,14"));
-	_mChordTypes.insert (std::pair<std::string, std::string>("add9",	"4,7,14"));
-	_mChordTypes.insert (std::pair<std::string, std::string>("7",		"4,7,10"));
-	_mChordTypes.insert (std::pair<std::string, std::string>("m",		"3,7"));
-	_mChordTypes.insert (std::pair<std::string, std::string>("m7",		"3,7,10"));
-	_mChordTypes.insert (std::pair<std::string, std::string>("m9",		"3,7,10,14"));
-	_mChordTypes.insert (std::pair<std::string, std::string>("madd9",	"3,7,14"));
+	_mChordTypes.insert (std::pair<std::string, std::string>("maj",		"4,7"));			// Major
+	_mChordTypes.insert (std::pair<std::string, std::string>("7",		"4,7,10"));			// Dominant 7th
+	_mChordTypes.insert (std::pair<std::string, std::string>("maj7",	"4,7,11"));			// Major 7th
+	_mChordTypes.insert (std::pair<std::string, std::string>("9",		"4,7,10,14"));		// Dominant 9th
+	_mChordTypes.insert (std::pair<std::string, std::string>("maj9",	"4,7,11,14"));		// Major 9th
+	_mChordTypes.insert (std::pair<std::string, std::string>("add9",	"4,7,14"));			// Add 9
+	_mChordTypes.insert (std::pair<std::string, std::string>("m",		"3,7"));			// Minor
+	_mChordTypes.insert (std::pair<std::string, std::string>("m7",		"3,7,10"));			// Minor 7th
+	_mChordTypes.insert (std::pair<std::string, std::string>("m9",		"3,7,10,14"));		// Minor 9th
+	_mChordTypes.insert (std::pair<std::string, std::string>("madd9",	"3,7,14"));			// Minor Add 9
 	_mChordTypes.insert (std::pair<std::string, std::string>("sus2",	"2,7"));
 	_mChordTypes.insert (std::pair<std::string, std::string>("7sus2",	"2,7,10"));
 	_mChordTypes.insert (std::pair<std::string, std::string>("sus4",	"5,7"));
