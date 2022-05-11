@@ -30,26 +30,52 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateRandomFunkGrooveMIDICommandFile (st
 		return StatusCode::OutputFileAlreadyExists;
 	}
 
-	std::vector<std::string> vChords;
-	vChords.push_back ("Em7");
-	vChords.push_back ("Em7");
-	vChords.push_back ("Bm7");
-	vChords.push_back ("Am7");
-	vChords.push_back ("Dm7");
-	vChords.push_back ("Dm7");
-	vChords.push_back ("Bm7");
-	vChords.push_back ("Am7");
+	std::uniform_int_distribution<size_t> randChord (0, _vRFGChords.size() - 1);
 
+	std::vector<std::string> vChords;
 	std::vector<std::string> vNotePositions;
+	std::string sChord, sPrevChord;
 	for (size_t i = 0; i < 8; i++)
 	{
 		std::string sGroove = GetRandomGroove (bRandomGroove);
 		vNotePositions.push_back (sGroove);
 
+		// Randomize chord selection and validate.
+		// (Except 1st chord must be Em7.)
+		if (i == 0)
+			sChord = "Em7";
+		else
+			sChord = _vRFGChords[randChord (_eng)];
+
+		bool bErr = false;
+		while (1)
+		{
+			// No same chord consecutively.
+			if (!bErr && sChord == sPrevChord)
+				bErr = true;
+
+			// No sus chords unless the last one.
+			if (!bErr)
+			{
+				size_t pos = sChord.find ("sus");
+				if (pos != std::string::npos)
+					if (i != 7)
+						bErr = true;
+			}
+
+			if (!bErr)
+				break;
+			bErr = false;
+
+			sChord = _vRFGChords[randChord (_eng)];
+		}
+
+		sPrevChord = sChord;
+
 		size_t n = std::count (sGroove.begin(), sGroove.end(), '+');
 		std::ostringstream ss;
-		ss << vChords[i] << "(" << n << ")";
-		vChords[i] = ss.str();
+		ss << sChord << "(" << n << ")";
+		vChords.push_back (ss.str());
 	}
 
 	std::ofstream ofs (sOutFile, std::ios::binary);
@@ -677,40 +703,75 @@ std::string CMIDIHandler::GetRandomGroove (bool& bRandomGroove)
 		return x;
 	};
 
-	// Iterate in 1/16th increments
-	uint32_t nNum16ths = nNumBars * 16;
-	std::string sNoteLen;
-	size_t nNoteLen16ths = 0;
-	size_t i = 0;
-	while (i < nNum16ths)
+	// Lambda
+	auto BuildNotePositionString = [&]()
 	{
-		if (i % 4 == 0)
-		{
-			// 1/4 note position
-			// We pass in a weighted list - favours shorter length
-			sNoteLen = RandNoteLen ({ 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 4 }, nNoteLen16ths);	// any of the note lengths
-			int ak = 1;
-		}
-		else if (i % 2 == 0)
-		{
-			// 1/8th note position
-			sNoteLen = RandNoteLen ({ 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2 }, nNoteLen16ths);	// Off, 1/16th, 1/8th or 3/8ths
-			int ak = 1;
-		}
-		else
-		{
-			// Odd-numbered 1/16th note position,
-			// ie. an upstroke.
-			sNoteLen = RandNoteLen ({ 0, 0, 0, 0, 0, 1, 1, 1, 1 }, nNoteLen16ths);		// Off or 1/16th
-			int ak = 1;
-		}
+		sNotePositions = "";
 
-		sNotePositions += sNoteLen;
-		i += nNoteLen16ths;	// advance counter according to determined note len.
-		int ak = 1;
-	}
+		// Iterate in 1/16th increments
+		uint32_t nNum16ths = nNumBars * 16;
+		std::string sNoteLen;
+		size_t nNoteLen16ths = 0;
+		size_t i = 0;
+		while (i < nNum16ths)
+		{
+			if (i % 4 == 0)
+			{
+				// 1/4 note position
+				// We pass in a weighted list - favours shorter length
+				sNoteLen = RandNoteLen ({ 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 4 }, nNoteLen16ths);	// any of the note lengths
+				int ak = 1;
+			}
+			else if (i % 2 == 0)
+			{
+				// 1/8th note position
+				sNoteLen = RandNoteLen ({ 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2 }, nNoteLen16ths);	// Off, 1/16th, 1/8th or 3/8ths
+				int ak = 1;
+			}
+			else
+			{
+				// Odd-numbered 1/16th note position,
+				// ie. an upstroke.
+				sNoteLen = RandNoteLen ({ 0, 0, 0, 0, 0, 1, 1, 1, 1 }, nNoteLen16ths);		// Off or 1/16th
+				int ak = 1;
+			}
+
+			sNotePositions += sNoteLen;
+			i += nNoteLen16ths;	// advance counter according to determined note len.
+			int ak = 1;
+		}
+	};
 
 	bRandomGroove = true;
+
+	// Validate the string
+	while (1)
+	{
+		BuildNotePositionString();
+
+		// Too many consecutive 1/16ths
+		size_t pos = sNotePositions.find ("+#+#+#+#");
+		if (pos != std::string::npos)
+			continue;
+
+		// No big gaps, ie. 3/8th or larger.
+		pos = sNotePositions.find ("      ");
+		if (pos != std::string::npos)
+			continue;
+
+		// No consecutive 1/4 notes.
+		pos = sNotePositions.find ("+#######+#######");
+		if (pos != std::string::npos)
+			continue;
+
+		// No more than two consecutive 1/8th notes
+		pos = sNotePositions.find ("+###+###+###");
+		if (pos != std::string::npos)
+			continue;
+
+		break;
+	}
+
 
 	return sNotePositions;
 }
@@ -1636,6 +1697,7 @@ std::string CMIDIHandler::GetStatusMessage()
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
 std::map<std::string, uint8_t>CMIDIHandler::_mChromaticScale;
+std::vector<std::string>CMIDIHandler::_vRFGChords;
 
 CMIDIHandler::ClassMemberInit CMIDIHandler::cmi;
 
@@ -1674,6 +1736,54 @@ CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("A#", 10));
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("Bb", 10));
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("B", 11));
+
+	// Weighted to favour certain chords.
+	//
+	// m7
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Em7");
+	_vRFGChords.push_back ("Am7");
+	_vRFGChords.push_back ("Am7");
+	_vRFGChords.push_back ("Am7");
+	_vRFGChords.push_back ("Am7");
+	_vRFGChords.push_back ("Am7");
+	_vRFGChords.push_back ("Am7");
+	_vRFGChords.push_back ("Am7");
+	_vRFGChords.push_back ("Am7");
+	_vRFGChords.push_back ("Bm7");
+	_vRFGChords.push_back ("Bm7");
+	_vRFGChords.push_back ("Bm7");
+	_vRFGChords.push_back ("Bm7");
+	_vRFGChords.push_back ("Bm7");
+	_vRFGChords.push_back ("Bm7");
+	_vRFGChords.push_back ("Bm7");
+	_vRFGChords.push_back ("Bm7");
+	_vRFGChords.push_back ("Dm7");
+	_vRFGChords.push_back ("Dm7");
+	_vRFGChords.push_back ("Dm7");
+	_vRFGChords.push_back ("Dm7");
+	//
+	// Minor
+	_vRFGChords.push_back ("Em");
+	_vRFGChords.push_back ("Em");
+	_vRFGChords.push_back ("Am");
+	_vRFGChords.push_back ("Bm");
+	//
+	// 7sus4
+	_vRFGChords.push_back ("E7sus4");
+	_vRFGChords.push_back ("E7sus4");
+	_vRFGChords.push_back ("A7sus4");
+	_vRFGChords.push_back ("B7sus4");
 }
 
 // Randomizer static variable declaration

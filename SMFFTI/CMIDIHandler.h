@@ -211,6 +211,8 @@ private:
 	static std::map<std::string, std::string>_mChordTypes;
 	static std::map<std::string, uint8_t>_mChromaticScale;
 
+	static std::vector<std::string> _vRFGChords;
+
 	static std::default_random_engine _eng;
 };
 
