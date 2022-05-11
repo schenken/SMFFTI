@@ -50,6 +50,10 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateRandomFunkGrooveMIDICommandFile (st
 		bool bErr = false;
 		while (1)
 		{
+			// Last chord NOT Em7
+			if (!bErr && i == 7 && sChord == "Em7")
+				bErr = true;
+
 			// No same chord consecutively.
 			if (!bErr && sChord == sPrevChord)
 				bErr = true;
