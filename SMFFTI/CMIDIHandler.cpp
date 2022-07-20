@@ -218,6 +218,8 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			_vNotePositions.push_back (sNotePositions);
 			_vNotePosLineInFile.push_back (nLineNum);
 
+			_vMelodyNotes.push_back ("");
+
 			nNumberOfNotes += std::count (sNotePositions.begin(), sNotePositions.end(), '+');
 			nDataLines++;
 			continue;
@@ -296,8 +298,20 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 					_vChordNames.push_back (sChordName);
 			}
 
-			nDataLines = 0;
+			nDataLines++;
 			continue;
+		}
+
+		if (nDataLines == 3)
+		{
+			// Optional melody instead of full chords
+			nDataLines = 0;
+
+			if (sTemp.substr (0, 2) == "M:")
+			{
+				_vMelodyNotes.back() = sTemp;
+				continue;
+			}
 		}
 
 		// Orphan Note Position line.
@@ -322,7 +336,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_sStatusMessage = ss.str();
 				return StatusCode::ParameterValueMissing;
 			}
-			
+
 			std::vector<std::string> vKV2 = akl::Explode (sLine.substr (1, sLine.size() - 1), "=");	// ws not stripped
 
 			if (vKeyValue[0] == "BassNote")
@@ -556,6 +570,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 		return StatusCode::InvalidLine;
 	}
 
+
 	uint8_t nSharpFlat = 0;
 	int8_t res = NoteToMidi ("C" + _sOctaveRegister, _nProvisionalLowestNote, nSharpFlat);
 
@@ -688,7 +703,22 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithGroove (std::string filename,
 	return nRes;
 }
 
-CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (std::string filename, bool bOverwriteOutFile)
+CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (const std::string& filename, bool bOverwriteOutFile)
+{
+	std::ofstream ofs;
+
+	StatusCode nRes = InitMidiFile (ofs, filename, bOverwriteOutFile);
+	if (nRes != StatusCode::Success)
+		return nRes;
+
+	GenerateNoteEvents();
+
+	FinishMidiFile (ofs);
+
+	return nRes;
+}
+
+CMIDIHandler::StatusCode CMIDIHandler::InitMidiFile (std::ofstream& ofs, const std::string& filename, bool bOverwriteOutFile)
 {
 	StatusCode nRes = StatusCode::Success;
 
@@ -701,7 +731,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (std::string filename, boo
 		return StatusCode::OutputFileAlreadyExists;
 	}
 
-	std::ofstream ofs (filename, std::ios::binary);
+	ofs.open (filename, std::ios::binary);
 
 	//-------------------------------------------------------------------------
 	// HEADER
@@ -744,8 +774,11 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (std::string filename, boo
 	PushInt8 (36);	// No. MIDI clocks per metronome click.
 	PushInt8 (8);	// No. 1/32nd notes per MIDI 1/4 note.
 
-	GenerateNoteEvents();
+	return nRes;
+}
 
+void CMIDIHandler::FinishMidiFile (std::ofstream& ofs)
+{
 	if (_bRandNoteStart || _bRandNoteEnd)
 		SortNoteEventsAndFixOverlaps();
 
@@ -770,8 +803,6 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (std::string filename, boo
 	ofs.write ((char*)&_vTrackBuf[0], _vTrackBuf.size());				// Chunk data.
 
 	ofs.close();
-
-	return nRes;
 }
 
 std::string CMIDIHandler::GetRandomGroove (bool& bRandomGroove)
@@ -909,6 +940,26 @@ void CMIDIHandler::GenerateNoteEvents()
 			std::string s2 (s);
 			std::transform (s2.begin(), s2.end(), s2.begin(), ::toupper);
 
+			// If a melody line is present for the current chord set, use it instead of
+			// outputting full chords
+			bool bMelody = false;
+			std::vector<std::string> vMN;
+			int32_t nMelodyNote = -1;
+			if (i == 1 && _vMelodyNotes[nItem].size())
+			{
+				vMN = akl::Explode (_vMelodyNotes[nItem], ":,");
+				bMelody = true;
+			}
+
+			uint32_t nNoteCount = 0;
+
+			auto ResolveMelodyNote = [&]()
+			{
+				nNoteCount++;
+				nMelodyNote = bMelody ? std::stoi (vMN[nNoteCount]) : -1;
+				return nMelodyNote;
+			};
+
 			for each (auto c in s)
 			{
 				if (c == '+')
@@ -921,7 +972,9 @@ void CMIDIHandler::GenerateNoteEvents()
 						if (i == 0)
 							bNoteOn = !bNoteOn;
 						else
-							AddMIDIChordNoteEvents (++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
+						{
+							AddMIDIChordNoteEvents (ResolveMelodyNote(), ++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
+						}
 					}
 					else
 					{
@@ -929,8 +982,8 @@ void CMIDIHandler::GenerateNoteEvents()
 						// so insert a Note Off first.
 						if (i == 1)
 						{
-							AddMIDIChordNoteEvents (nChordPair, _vChordNames[nPrevNote], bNoteOn, pos32nds * _ticksPer32nd);
-							AddMIDIChordNoteEvents (++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
+							AddMIDIChordNoteEvents (nMelodyNote, nChordPair, _vChordNames[nPrevNote], bNoteOn, pos32nds * _ticksPer32nd);
+							AddMIDIChordNoteEvents (ResolveMelodyNote(), ++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
 						}
 					}
 				}
@@ -942,7 +995,9 @@ void CMIDIHandler::GenerateNoteEvents()
 						if (i == 0)
 							bNoteOn = !bNoteOn;
 						else
-							AddMIDIChordNoteEvents (++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
+						{
+							AddMIDIChordNoteEvents (ResolveMelodyNote(), ++nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
+						}
 
 						if (i == 0)
 						{
@@ -960,7 +1015,7 @@ void CMIDIHandler::GenerateNoteEvents()
 						if (i == 0)
 							bNoteOn = !bNoteOn;
 						else
-							AddMIDIChordNoteEvents (nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
+							AddMIDIChordNoteEvents (nMelodyNote, nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
 				}
 
 				pos32nds++;
@@ -972,8 +1027,10 @@ void CMIDIHandler::GenerateNoteEvents()
 				if (i == 0)
 					bNoteOn = !bNoteOn;
 				else
-					AddMIDIChordNoteEvents (nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
+					AddMIDIChordNoteEvents (nMelodyNote, nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
 
+
+			// Dump the melody notes to file so user can copy the melody.
 			if (i == 1 && _bMelodyMode)
 			{
 				for (size_t j = 0; j < _vBarCount[nItem]; j++)
@@ -982,24 +1039,80 @@ void CMIDIHandler::GenerateNoteEvents()
 
 				_vBarCount;
 				ofs << s << std::endl;
+
+
+				std::string cn;
+				std::string fred = akl::RemoveWhitespace (s, 8);
+
+
+				//--------------------------------------------------------------------
+				// Tokenize the note position string
+				std::vector<std::string> eric;
+				bool bGroup = false;
+				std::string sTemp;
+				for (auto c : fred)
+				{
+					if (c == '+')
+					{
+						if (!bGroup)
+						{
+							// New group of chars
+							bGroup = true;
+							sTemp += c;
+						}
+						else
+						{
+							// End of group, new group
+							eric.push_back (sTemp);
+							sTemp = c;
+						}
+					}
+					else if (c == '#')
+					{
+						sTemp += c;
+						bGroup = true;
+					}
+					else
+					{
+						// Assumed to be a space - end of group
+						bGroup = false;
+						eric.push_back (sTemp);
+						sTemp = "";
+					}
+				}
+
+				if (sTemp.size())
+					eric.push_back (sTemp);
+				//--------------------------------------------------------------------
+
+
+
+				// Construct list of chords
+				uint32_t nC = 0;
+				std::string comma;
+				for (auto e : eric)
+				{
+					if (e[0] == '+')
+					{
+						cn += comma + _vMelodyChordNames[nC];
+						comma = ", ";
+					}
+					nC++;
+				}
+				ofs << cn << std::endl;
+
 				uint32_t nCount = 0;
 				std::string prevChordName;
 				std::string dlim;
-				for (auto n : _vMelodyNotes)
+				ofs << "M: ";
+				for (auto n : _vRandomMelodyNotes)
 				{
-					if (_vMelodyChordNames[nCount] != prevChordName)
-					{
-						ofs << (nCount == 0 ? "" : "\n") << _vMelodyChordNames[nCount] << ": ";
-						prevChordName = _vMelodyChordNames[nCount];
-						dlim = "";
-					}
-
 					ofs << dlim << std::to_string(n);
 					dlim = ", ";
 					nCount++;
 				}
 				ofs << "\n\n";
-				_vMelodyNotes.clear();
+				_vRandomMelodyNotes.clear();
 				_vMelodyChordNames.clear();
 			}
 
@@ -1664,7 +1777,7 @@ void CMIDIHandler::PushNoteEvents()
 	}
 }
 
-void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordName, bool& bNoteOn, uint32_t nEventTime)
+void CMIDIHandler::AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSeq, std::string chordName, bool& bNoteOn, uint32_t nEventTime)
 {
 	bNoteOn = !bNoteOn;
 
@@ -1725,6 +1838,44 @@ void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordN
 	uint32_t nET;
 
 
+	// Has a melody note been specified?
+	if (nMelodyNote >= 0)
+	{
+		static uint8_t nNote;
+		if (bNoteOn)
+		{
+			uint8_t mn = (uint8_t)nMelodyNote;
+
+
+			// Auto-correct notes to match scale of the chord.
+			// This can happen if you re-use a melody from a major chord
+			// for a minor chord, or vice-versa
+			if (vChordIntervals[0] == "3")
+			{
+				if (mn == 2 || mn == 4 || mn == 9)
+					mn++;
+			}
+			else
+			{
+				if (mn == 3 || mn == 5 || mn == 10)
+					mn--;
+			}
+
+
+			nNote = nRoot + mn;
+
+			// Remember note interval for output to 'melody text file'
+			_vRandomMelodyNotes.push_back (mn);
+			_vMelodyChordNames.push_back (chordName);
+		}
+
+		MIDINote note (nNoteSeq, nEventTime, nEventType, nNote, fnRandVel());
+		_vMIDINoteEvents.push_back (note);
+		return;
+	}
+
+
+
 	// MelodyMode: Instead of chords, output a random note
 	// from the Major/Minor Pentatonic scale of the chord.
 	// (No position offset is applicable.)
@@ -1745,7 +1896,7 @@ void CMIDIHandler::AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordN
 			nNote = nRoot + rn;
 
 			// Remember random note interval (rn) for output to 'melody text file'
-			_vMelodyNotes.push_back (rn);
+			_vRandomMelodyNotes.push_back (rn);
 			_vMelodyChordNames.push_back (chordName);
 		}
 

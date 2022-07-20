@@ -80,7 +80,7 @@ public:
 	StatusCode Verify();	// Load command file and check content is valid.
 
 	// Whack out a dead simple MIDI file. Single track with just a few notes.
-	StatusCode CreateMIDIFile (std::string filename, bool bOverwriteOutFile);
+	StatusCode CreateMIDIFile (const std::string& filename, bool bOverwriteOutFile);
 
 	// Generate a copy of the input file, but with it containing a
 	// randomly-generated simple groove.
@@ -98,10 +98,13 @@ private:
 	void SortChordNotes();
 	void PushNoteEvents();
 
-	void AddMIDIChordNoteEvents (uint32_t nNoteSeq, std::string chordName, bool& bNoteOn, uint32_t nEventTime);
+	void AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSeq, std::string chordName, bool& bNoteOn, uint32_t nEventTime);
 	int8_t NoteToMidi (std::string sNote, uint8_t& nNote, uint8_t& nSharpFlat);
 
 	bool GetChordIntervals (std::string sChordName, uint8_t& nRoot, std::vector<std::string>& vChordIntervals);
+
+	StatusCode InitMidiFile (std::ofstream& ofs, const std::string& filename, bool bOverwriteOutFile);
+	void FinishMidiFile (std::ofstream& ofs);
 
 	uint32_t Swap32 (uint32_t n) const;
 	uint16_t Swap16 (uint16_t n) const;
@@ -123,6 +126,7 @@ private:
 	std::vector<std::string> _vNotePositions;
 	std::vector<uint32_t> _vNotePosLineInFile;
 	std::vector<std::string> _vChordNames;
+	std::vector<std::string> _vMelodyNotes;
 	std::vector<uint32_t> _vBarCount;
 
 	// Track chunk storage
@@ -204,7 +208,7 @@ private:
 
 	bool _bMelodyMode = 0;
 	uint32_t _melodyModeLineNum = 0;
-	std::vector<uint8_t> _vMelodyNotes;
+	std::vector<uint8_t> _vRandomMelodyNotes;
 	std::vector<std::string> _vMelodyChordNames;
 
 	std::string _sTrackName = "Made by SMFFTI";
