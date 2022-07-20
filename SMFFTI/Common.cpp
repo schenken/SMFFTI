@@ -86,7 +86,7 @@ std::vector<std::string> Explode (const std::string& s, const std::string& delim
 	while (found != std::string::npos)
 	{
 		v.push_back (s.substr (prev, found - prev));
-		prev = found + delim.length();
+		prev = found + 1;
 		found = s.find_first_of (delim, prev);
 	}
 

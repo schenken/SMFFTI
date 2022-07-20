@@ -68,7 +68,9 @@ public:
 		InvalidFunkStrumUpStrokeAttenuationValue,
 		InvalidFunkStrumVelDeclineIncrementValue,
 		MaxFourBarsPerLine,
-		OutputFileAlreadyExists
+		OutputFileAlreadyExists,
+		InvalidMelodyModeValue,
+		InvalidSimpleGrooveValue
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -80,12 +82,16 @@ public:
 	// Whack out a dead simple MIDI file. Single track with just a few notes.
 	StatusCode CreateMIDIFile (std::string filename, bool bOverwriteOutFile);
 
-	std::string GetStatusMessage();
+	// Generate a copy of the input file, but with it containing a
+	// randomly-generated simple groove.
+	StatusCode CopyFileWithGroove (std::string filename, bool bOverwriteOutFile);
 
+	std::string GetStatusMessage();
 
 private:
 	std::string GetRandomGroove (bool& bRandomGroove);
 	void GenerateNoteEvents();
+	void GenerateRandomMelody();
 	void SortNoteEventsAndFixOverlaps();
 	void ApplyNoteStagger();
 	void ApplyArpeggiation();
@@ -115,6 +121,7 @@ private:
 	std::vector<std::string> _vInput;
 
 	std::vector<std::string> _vNotePositions;
+	std::vector<uint32_t> _vNotePosLineInFile;
 	std::vector<std::string> _vChordNames;
 	std::vector<uint32_t> _vBarCount;
 
@@ -195,12 +202,19 @@ private:
 	double _nFunkStrumUpStrokeAttenuation = 1.0;
 	uint8_t _nFunkStrumVelDeclineIncrement = 5;
 
+	bool _bMelodyMode = 0;
+	uint32_t _melodyModeLineNum = 0;
+	std::vector<uint8_t> _vMelodyNotes;
+	std::vector<std::string> _vMelodyChordNames;
+
 	std::string _sTrackName = "Made by SMFFTI";
 
 	std::string _sStatusMessage = "";
 
 	// Randomizer
 	std::random_device _rdev;
+
+	const std::string sRuler = "[......|.......|.......|.......]";
 
 	//---------------------------------------------------------------------
 	// Static class members
