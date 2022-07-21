@@ -82,7 +82,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateRandomFunkGrooveMIDICommandFile (st
 		vChords.push_back (ss.str());
 	}
 
-	std::ofstream ofs (sOutFile, std::ios::binary);
+	std::ofstream ofs (sOutFile, std::ios::out);
 
 	std::ostringstream ss;
 
@@ -620,7 +620,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 	return result;
 }
 
-CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithGroove (std::string filename, bool bOverwriteOutFile)
+CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithRhythm (std::string filename, bool bOverwriteOutFile)
 {
 	StatusCode nRes = StatusCode::Success;
 
@@ -628,7 +628,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithGroove (std::string filename,
 	{
 		std::ostringstream ss;
 		ss << "Output file already exists. Use the -o switch to overwrite, eg:\n"
-			<< "SMFFTI.exe -sg mymidi.txt mymidi_groove.txt -o";
+			<< "SMFFTI.exe -sg mymidi.txt mymidi_rhythm.txt -o";
 		_sStatusMessage = ss.str();
 		return StatusCode::OutputFileAlreadyExists;
 	}
@@ -644,16 +644,11 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithGroove (std::string filename,
 		int32_t noteStart = -1, noteEnd = 0;
 		while (n < it.length())
 		{
-			int ak = 1;
 			if (it[n] == '+' && noteStart == -1)
-			{
 				noteStart = n;
-			}
 
 			else if (it[n] == '#' && noteStart == -1)
-			{
 				noteStart = n;
-			}
 
 			else if (noteStart >= 0 && (it[n] == ' ' || it[n] == '+' || n == it.length() - 1))
 			{
@@ -663,7 +658,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithGroove (std::string filename,
 
 				for (int32_t i = noteStart + 1; i <= noteEnd; i++)
 				{
-					// Parse the note and make some gaps to introduce groove.
+					// Parse the note and make some gaps to introduce rhythm.
 
 					if (i % 2 == 0)		// 1/16ths: Don't allow blanks.
 						continue;
@@ -671,8 +666,6 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithGroove (std::string filename,
 					uint32_t w = vRand[randNoteOff (_eng)];
 					if (w == 0)
 						it[i] = ' ';
-					int ak = 1;
-
 				}
 				noteStart = -1;
 			}
@@ -681,18 +674,15 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithGroove (std::string filename,
 		}
 	}
 
-	// Output copy of the input file with the generated groove.
-	std::ofstream ofs (filename, std::ios::binary);
+	// Output copy of the input file with the generated rhythm.
+	std::ofstream ofs (filename, std::ios::out);
 	uint32_t nLine = 1;
 	uint32_t nLine2 = 0;
 	for (auto s : _vInput)
 	{
 		if (nLine2 < _vNotePosLineInFile.size() && nLine == _vNotePosLineInFile[nLine2])
-		{
-			// Output the groove version of note positions.
-			int ak = 1;
+			// Output the rhythm version of note positions.
 			ofs << _vNotePositions[nLine2++] << std::endl;
-		}
 		else
 			ofs << s << std::endl;
 
@@ -916,11 +906,26 @@ void CMIDIHandler::GenerateNoteEvents()
 	// to allow for note commencing *before* the notional start position.
 	uint16_t nBar = _bRandNoteStart && (!_bRandNoteOffsetTrim) ? 1 : 0;
 
+
+	// Melody Mode: Save the melody to timestamped file
+	// so it can be reused.
 	std::ofstream ofs;
+	std::string sMelodySaveFile = _sInputFile;
 	if (_bMelodyMode)
 	{
-		ofs.open ("melody.txt", std::ios::binary);
-		ofs << "+MelodyFile=1\n\n";
+		std::string ts = akl::TimeStamp();
+		std::string::size_type pos = _sInputFile.find_last_of ('.');
+		if (pos == std::wstring::npos)
+		{
+			pos = _sInputFile.size();
+			ts += ".txt";
+		}
+
+		sMelodySaveFile.insert (pos, "_" + ts);
+		ofs.open (sMelodySaveFile, std::ios::out);
+
+		std::string fname = PathFindFileNameA (&sMelodySaveFile[0]);
+		ofs << "+TrackName = " << fname << "\n\n";
 	}
 
 	for (uint8_t i = 0; i < 2; i++)
@@ -953,6 +958,7 @@ void CMIDIHandler::GenerateNoteEvents()
 
 			uint32_t nNoteCount = 0;
 
+			// Lambda
 			auto ResolveMelodyNote = [&]()
 			{
 				nNoteCount++;
@@ -1030,67 +1036,22 @@ void CMIDIHandler::GenerateNoteEvents()
 					AddMIDIChordNoteEvents (nMelodyNote, nChordPair, _vChordNames[nNote], bNoteOn, pos32nds * _ticksPer32nd);
 
 
+			//---------------------------------------------------------------------
 			// Dump the melody notes to file so user can copy the melody.
 			if (i == 1 && _bMelodyMode)
 			{
 				for (size_t j = 0; j < _vBarCount[nItem]; j++)
 					ofs << sRuler;
 				ofs << "\n";
-
-				_vBarCount;
 				ofs << s << std::endl;
-
-
-				std::string cn;
-				std::string fred = akl::RemoveWhitespace (s, 8);
-
-
-				//--------------------------------------------------------------------
-				// Tokenize the note position string
-				std::vector<std::string> eric;
-				bool bGroup = false;
-				std::string sTemp;
-				for (auto c : fred)
-				{
-					if (c == '+')
-					{
-						if (!bGroup)
-						{
-							// New group of chars
-							bGroup = true;
-							sTemp += c;
-						}
-						else
-						{
-							// End of group, new group
-							eric.push_back (sTemp);
-							sTemp = c;
-						}
-					}
-					else if (c == '#')
-					{
-						sTemp += c;
-						bGroup = true;
-					}
-					else
-					{
-						// Assumed to be a space - end of group
-						bGroup = false;
-						eric.push_back (sTemp);
-						sTemp = "";
-					}
-				}
-
-				if (sTemp.size())
-					eric.push_back (sTemp);
-				//--------------------------------------------------------------------
-
 
 
 				// Construct list of chords
 				uint32_t nC = 0;
+				std::string cn;	// chord name list, eg. "C, Am, F, G"
 				std::string comma;
-				for (auto e : eric)
+				std::vector<std::string> vNotePosItems = TokenizeNotePosStr (s);
+				for (auto e : vNotePosItems)
 				{
 					if (e[0] == '+')
 					{
@@ -1101,6 +1062,7 @@ void CMIDIHandler::GenerateNoteEvents()
 				}
 				ofs << cn << std::endl;
 
+				// Construct sequence of semitone intervals representing the melody
 				uint32_t nCount = 0;
 				std::string prevChordName;
 				std::string dlim;
@@ -1115,6 +1077,8 @@ void CMIDIHandler::GenerateNoteEvents()
 				_vRandomMelodyNotes.clear();
 				_vMelodyChordNames.clear();
 			}
+			//---------------------------------------------------------------------
+
 
 			// move pointer 4 bars forward
 			if (i == 1)
@@ -1128,86 +1092,6 @@ void CMIDIHandler::GenerateNoteEvents()
 
 	if (_bMelodyMode)
 		ofs.close();
-}
-
-void CMIDIHandler::GenerateRandomMelody()
-{
-	_vBarCount.push_back (2);
-	bool bRandomGroove = true;
-	std::string sGroove = GetRandomGroove (bRandomGroove);
-
-	// Temp saving of groove
-	std::ofstream ofs ("D:\\SMFFTI\\tempGroove.txt", std::ios::binary);
-	ofs << sGroove << std::endl;
-	ofs.close();
-
-	uint32_t pos32nds = 0;
-	uint32_t nNoteSeq = -1;
-	bool bNoteOn = false;
-	uint8_t nNote = 60;
-
-	// Notes (semitone intervals) that can be used in the melody.
-	// Essentially, Major Pentatonic.
-	std::vector<uint8_t> vNotes = { 0, 2, 4, 7, 9 };
-	std::uniform_int_distribution<uint32_t> randNote (0, vNotes.size() - 1);
-
-	// Lambda
-	auto AddNote = [&](EventName evt)
-	{
-		uint32_t nTime = pos32nds * _ticksPer32nd;
-		uint8_t nEvent = (uint8_t)evt;
-		uint8_t nVel = 80;
-
-		// Note On: New random note and increment note sequence number.
-		if (nEvent == (uint8_t)EventName::NoteOn)
-		{
-			nNote = 60 + vNotes[randNote (_eng)];
-			nNoteSeq++;
-		}
-
-		MIDINote note (nNoteSeq, nTime, nEvent, nNote, nVel);
-		_vMIDINoteEvents.push_back (note);
-
-		bNoteOn = !bNoteOn;
-	};
-
-	// Parse the groove
-	for each (auto c in sGroove)
-	{
-		if (c == '+')
-		{
-			// start of note
-			if (!bNoteOn)
-			{
-				AddNote (EventName::NoteOn);
-			}
-			else
-			{
-				// Another note detected without a gap from previous note,
-				// so insert a Note Off first.
-				AddNote (EventName::NoteOff);
-				AddNote (EventName::NoteOn);
-			}
-		}
-		else if (c == '#')
-		{
-			// note continues
-		}
-		else
-		{
-			// ie. a space
-			// end of note
-			if (bNoteOn)
-				AddNote (EventName::NoteOff);
-		}
-
-		pos32nds++;
-	}
-
-	if (bNoteOn)
-		AddNote (EventName::NoteOff);	// Ensure a final note-off.
-
-	int ak = 1;
 }
 
 void CMIDIHandler::SortNoteEventsAndFixOverlaps()
@@ -2082,6 +1966,54 @@ void CMIDIHandler::PushText (const std::string& s)
 	auto bytes = reinterpret_cast<const byte*>(s.data());
 	_vTrackBuf.insert (_vTrackBuf.end(), bytes, bytes + s.length());
 	_nOffset += s.length();
+}
+
+std::vector<std::string> CMIDIHandler::TokenizeNotePosStr (std::string notePosStr)
+{
+	// Parse a string like "+## ##### ##+## # # ####+## # #" and
+	// put all the items in a vector.
+
+	std::vector<std::string> vT;
+
+	notePosStr = akl::RemoveWhitespace (notePosStr, 8);
+
+	bool bGroup = false;
+	std::string sTemp;
+	for (auto c : notePosStr)
+	{
+		if (c == '+')
+		{
+			if (!bGroup)
+			{
+				// New group of chars
+				bGroup = true;
+				sTemp += c;
+			}
+			else
+			{
+				// End of group, new group
+				vT.push_back (sTemp);
+				sTemp = c;
+			}
+		}
+		else if (c == '#')
+		{
+			sTemp += c;
+			bGroup = true;
+		}
+		else
+		{
+			// Assumed to be a space - end of group
+			bGroup = false;
+			vT.push_back (sTemp);
+			sTemp = "";
+		}
+	}
+
+	if (sTemp.size())
+		vT.push_back (sTemp);
+
+	return vT;
 }
 
 std::string CMIDIHandler::GetStatusMessage()

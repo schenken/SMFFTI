@@ -12,5 +12,6 @@ bool VerifyTextInteger (std::string sNum, int32_t& nReturnValue, int32_t nFrom, 
 bool VerifyDoubleInteger (std::string sNum, double& nReturnValue, double nFrom, double nTo);
 
 bool MyFileExists (const std::string& name);
+std::string TimeStamp();
 
 }

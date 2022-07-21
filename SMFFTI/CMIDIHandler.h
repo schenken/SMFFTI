@@ -83,15 +83,14 @@ public:
 	StatusCode CreateMIDIFile (const std::string& filename, bool bOverwriteOutFile);
 
 	// Generate a copy of the input file, but with it containing a
-	// randomly-generated simple groove.
-	StatusCode CopyFileWithGroove (std::string filename, bool bOverwriteOutFile);
+	// randomly-generated rhythm.
+	StatusCode CopyFileWithRhythm (std::string filename, bool bOverwriteOutFile);
 
 	std::string GetStatusMessage();
 
 private:
 	std::string GetRandomGroove (bool& bRandomGroove);
 	void GenerateNoteEvents();
-	void GenerateRandomMelody();
 	void SortNoteEventsAndFixOverlaps();
 	void ApplyNoteStagger();
 	void ApplyArpeggiation();
@@ -116,6 +115,8 @@ private:
 
 	void PushInt8 (uint8_t n);
 	void PushText (const std::string& s);
+
+	std::vector<std::string> TokenizeNotePosStr (std::string notePosStr);
 
 	// File with MIDI content directives.
 	std::string _sInputFile;

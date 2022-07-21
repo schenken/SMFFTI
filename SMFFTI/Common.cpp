@@ -200,4 +200,18 @@ bool MyFileExists (const std::string& name)
 	return f.good();
 }
 
+std::string TimeStamp()
+{
+	static char szTimeStamp[30];
+	time_t now;
+	time(&now);
+	struct tm Now;
+	localtime_s(&Now, &now);
+	sprintf_s (szTimeStamp, "%02d%02d%02d%02d%02d%02d",
+		(Now.tm_year - 100), Now.tm_mon + 1, Now.tm_mday, Now.tm_hour, Now.tm_min, Now.tm_sec);
+
+	return szTimeStamp;
+}
+
+
 }
