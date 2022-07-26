@@ -248,8 +248,6 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				std::ostringstream ss;
 				ss << v[0] << "(" << n << ")";
 				v[0] = ss.str();
-
-				int ak = 1;
 			}
 
 			for each (auto c in v)
@@ -512,6 +510,16 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_melodyModeLineNum = nLineNum;
 				continue;
 			}
+			else if (vKeyValue[0] == "RandomRhythmSpaceThreshold")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 99))
+				{
+					_sStatusMessage = "Invalid +RandomRhythmSpaceThreshold value (range 1-99).";
+					return StatusCode::RandomRhythmSpaceThreshold;
+				}
+				_nRandomRhythmSpaceThreshold = nVal;
+				continue;
+			}
 			else
 			{
 				std::string p = sLine.substr (1, sTemp.size() - 1);
@@ -628,66 +636,239 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithRhythm (std::string filename,
 	{
 		std::ostringstream ss;
 		ss << "Output file already exists. Use the -o switch to overwrite, eg:\n"
-			<< "SMFFTI.exe -sg mymidi.txt mymidi_rhythm.txt -o";
+			<< "SMFFTI.exe -rr mymidi.txt mymidi_rhythm.txt -o";
 		_sStatusMessage = ss.str();
 		return StatusCode::OutputFileAlreadyExists;
 	}
 
-	std::vector<uint32_t> vRand = { 0, 0, 0, 0, 1, 1, 1 };
-	std::uniform_int_distribution<size_t> randNoteOff (0, vRand.size() - 1);
+	//-------------------------------------------------------------------------
+	// Randomizer definitions for Notes.
+	std::vector<uint32_t> vNoteLenChoice =
+	{
+		//32, 16, 
+		//8, 8, 8, 8, 8, 8, 8, 8,
+		//4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+		//4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+		//4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+		//2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+		//2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	};
 
+	//-------------------------------------------------------------------------
+	// Randomizer definitions for Gaps - less chance of long gaps
+	std::vector<uint32_t> vGapLenChoice =
+	{
+		//2, 2, 1, 1
+		//8, 8, 8, 8, 8, 8, 8, 8,
+		//4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+		//2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+	};
+
+
+	//-------------------------------------------------------------------------
+	// This important for good groove/syncopation. There will ALWAYS be gaps
+	// on off-beat 1/32nds, and if you have ZERO chance of gaps (no zeroes specified
+	// in this list) you will get straight 1/16th note staccato.
+	std::vector<uint32_t> vNoteOrGap =
+	{
+		0, 0, 0, 0, 0, 0, 0, 0,
+		1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1,
+	};
+	std::uniform_int_distribution<uint32_t> randNoteOrGap (0, vNoteOrGap.size() - 1);
+
+	// Lambda: Serves to return a length value for either a note position or a gap.
+	auto RandLen = [&](uint8_t maxNoteLen, uint8_t maxLen, std::vector<uint32_t> vChoice)
+	{
+		uint32_t nIndex = 0;
+		for (uint32_t i = 0; i < vChoice.size(); i++)
+		{
+			if (vChoice[i] == maxNoteLen)
+			{
+				nIndex = i;
+				break;
+			}
+		}
+		std::uniform_int_distribution<uint32_t> randChoice (nIndex, vChoice.size() - 1);
+		uint8_t nLen;
+		do
+			nLen = vChoice[randChoice (_eng)];
+		while (nLen > maxLen);
+
+		return nLen;
+	};
+
+	uint32_t nItem = 0;
+	uint32_t nChordNameIndex = 0;
+	std::vector<std::string> vNewChordList;
 	for (auto& it : _vNotePositions)
 	{
-		// Walk the string, looking for plus-sign or hash-after-a-space,
-		// indicating new note
+		// Pad out string if ness.
+		while (it.size() < _vBarCount[nItem] * 32)
+			it.push_back (' ');
+
+		// Locate + signs.
+		std::vector<uint8_t> vPlusSignPos;
+		std::vector<uint8_t> vChordRepCount;
 		uint32_t n = 0;
-		int32_t noteStart = -1, noteEnd = 0;
-		while (n < it.length())
+		for (auto c : it)
 		{
-			if (it[n] == '+' && noteStart == -1)
-				noteStart = n;
-
-			else if (it[n] == '#' && noteStart == -1)
-				noteStart = n;
-
-			else if (noteStart >= 0 && (it[n] == ' ' || it[n] == '+' || n == it.length() - 1))
+			if (c == '+')
 			{
-				noteEnd = n - 1;
-				if (n == it.length() - 1)
-					noteEnd = n;
-
-				for (int32_t i = noteStart + 1; i <= noteEnd; i++)
-				{
-					// Parse the note and make some gaps to introduce rhythm.
-
-					if (i % 2 == 0)		// 1/16ths: Don't allow blanks.
-						continue;
-
-					uint32_t w = vRand[randNoteOff (_eng)];
-					if (w == 0)
-						it[i] = ' ';
-				}
-				noteStart = -1;
+				vPlusSignPos.push_back (n);
+				vChordRepCount.push_back (0);
 			}
-
 			n++;
 		}
+
+
+		for (uint32_t i = 0; i < vPlusSignPos.size(); i++)
+		{
+			uint8_t nStart = vPlusSignPos[i];
+			uint8_t nEnd = (i < vPlusSignPos.size() - 1) ? 
+				vPlusSignPos[i + 1] : (uint8_t)it.size() - 1;
+
+			uint32_t j = nStart;
+			uint8_t noteOn = 1;
+			while (j < nEnd)
+			{
+				uint8_t maxLen = nEnd - j;
+				uint8_t nLargestNoteLen;
+
+				if (j % 32 == 0)			// whole note position
+					nLargestNoteLen = 32;
+				else if (j % 16 == 0)		// 1/2 note position
+					nLargestNoteLen = 16;
+				else if (j % 8 == 0)		// 1/4 note position
+					nLargestNoteLen = 8;
+				else if (j % 4 == 0)		// 1/8 note position
+					nLargestNoteLen = 4;
+				else if (j % 2 == 0)		// 1/16th note position
+					nLargestNoteLen = 2;
+				else						// 1/32nd note position
+					nLargestNoteLen = 1;
+
+				// Randomize whether to create a note, or a gap.
+				noteOn = j == nStart ? 1 : vNoteOrGap[randNoteOrGap (_eng)];
+
+				// No notes starting on off-beat 1/32nds; 
+				// that is, all notes starting on even-numbered 1/32nds.
+				// (This is IMPORTANT for proper syncopation.)
+				if (nLargestNoteLen == 1)
+					noteOn = 0;
+
+				uint8_t nl = RandLen (nLargestNoteLen, maxLen, noteOn ? vNoteLenChoice : vGapLenChoice);
+
+				// Output the note/gap chars.
+				uint32_t m = j + nl;
+				char ch = noteOn ? '+' : ' ';
+				for (uint32_t k = j; k < m; k++)
+				{
+					it[k] = ch;
+					ch = noteOn ? '#' : ' ';
+				}
+
+				if (noteOn)
+					vChordRepCount[i]++;
+
+				//if (noteOn == 1)
+				//	noteOn = 0;
+				//else
+				//	noteOn = 1;
+
+
+				j = m;
+				int ak = 1;
+			}
+
+			int ak = 1;
+		}
+
+		std::string newChordList;
+		std::string comma;
+		for (auto c : vChordRepCount)
+		{
+			_vChordNames[nChordNameIndex] += "(" + std::to_string (c) + ")";
+			newChordList += comma + _vChordNames[nChordNameIndex];
+			comma = ", ";
+			nChordNameIndex++;
+		}
+		vNewChordList.push_back (newChordList);
+
+		nItem++;
 	}
 
 	// Output copy of the input file with the generated rhythm.
 	std::ofstream ofs (filename, std::ios::out);
 	uint32_t nLine = 1;
 	uint32_t nLine2 = 0;
+	uint32_t iNewChordList = 0;
+	bool bIgnoreNextLine = false;
 	for (auto s : _vInput)
 	{
+		if (bIgnoreNextLine)
+		{
+			bIgnoreNextLine = false;
+			nLine++;
+			continue;
+		}
+
 		if (nLine2 < _vNotePosLineInFile.size() && nLine == _vNotePosLineInFile[nLine2])
+		{
 			// Output the rhythm version of note positions.
 			ofs << _vNotePositions[nLine2++] << std::endl;
+			ofs << vNewChordList[iNewChordList++] << std::endl;
+			bIgnoreNextLine = true;
+		}
 		else
 			ofs << s << std::endl;
 
 		nLine++;
 	}
+	ofs.close();
+
+	return nRes;
+}
+
+CMIDIHandler::StatusCode CMIDIHandler::GenRandMelodies (std::string filename, bool bOverwriteOutFile)
+{
+	StatusCode nRes = StatusCode::Success;
+
+	if (!bOverwriteOutFile && akl::MyFileExists (filename))
+	{
+		std::ostringstream ss;
+		ss << "Output file already exists. Use the -o switch to overwrite, eg:\n"
+			<< "SMFFTI.exe -grm generic_rand_melodies.txt -o";
+		_sStatusMessage = ss.str();
+		return StatusCode::OutputFileAlreadyExists;
+	}
+
+	// Major Pentatonic intervals. Since SMFFTI auto-corrects notes according to whether
+	// they are in major or minor key, we don't have to worry about specifying the
+	// Minor Pentatonic for this operation.
+	std::vector<uint8_t> vNotes = { 0, 2, 4, 7, 9 };
+	std::uniform_int_distribution<uint32_t> randNote (0, vNotes.size() - 1);
+
+	std::ofstream ofs (filename, std::ios::out);
+
+	ofs << "# Generic Randomized Melody lines. Generated by SMFFTI (-grm) at "
+		<< akl::TimeStamp() << "\n\n";
+
+	for (size_t i = 0; i < 1000; i++)
+	{
+		ofs << "#Melody " << i << "\nM: ";
+		std::string comma;
+		for (size_t j = 0; j < 64; j++)
+		{
+			uint16_t rn = vNotes[randNote (_eng)];
+			ofs << comma << rn;
+			comma = ", ";
+		}
+		ofs << "\n\n";
+	}
+
 	ofs.close();
 
 	return nRes;
@@ -838,20 +1019,17 @@ std::string CMIDIHandler::GetRandomGroove (bool& bRandomGroove)
 				// 1/4 note position
 				// We pass in a weighted list - favours shorter length
 				sNoteLen = RandNoteLen ({ 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 4 }, nNoteLen16ths);	// any of the note lengths
-				int ak = 1;
 			}
 			else if (i % 2 == 0)
 			{
 				// 1/8th note position
 				sNoteLen = RandNoteLen ({ 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2 }, nNoteLen16ths);	// Off, 1/16th, 1/8th or 3/8ths
-				int ak = 1;
 			}
 			else
 			{
 				// Odd-numbered 1/16th note position,
 				// ie. an upstroke.
 				sNoteLen = RandNoteLen ({ 0, 0, 0, 0, 0, 1, 1, 1, 1 }, nNoteLen16ths);		// Off or 1/16th
-				int ak = 1;
 			}
 
 			sNotePositions += sNoteLen;

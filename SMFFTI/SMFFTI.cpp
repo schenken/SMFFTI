@@ -85,7 +85,7 @@ void DoStuff (int argc, char* argv[])
         return;
     }
 
-    uint8_t iInFile = 1, iOutFile = 2;
+    int8_t iInFile = 1, iOutFile = 2;
 
     // Random Rhythm: Create modified version of commend file
     // to contain a rhythm (which is not connected with the
@@ -108,7 +108,28 @@ void DoStuff (int argc, char* argv[])
         iOutFile = 3;
     }
 
-    std::string sInFile (argv[iInFile]);
+    // Generic Randomized Melodies (-grm)
+    // (No input file required.)
+    if (std::string (argv[1]) == "-grm")
+    {
+        if (argc < 3)
+        {
+            std::ostringstream ss;
+            ss << "Command specified incorrectly. The Generic Random Melodies\n"
+                << "command should be something like:\n\n"
+                << "    SMFFTI.exe -grm generic_rand_melodies.txt\n";
+            PrintError (ss.str());
+            return;
+        }
+
+        CMIDIHandler midiH ("");
+        if (midiH.GenRandMelodies (argv[iOutFile], bOverwriteOutFile) != CMIDIHandler::StatusCode::Success)
+            PrintError (midiH.GetStatusMessage());
+        return;
+    }
+
+    // Input file expected.
+    std::string sInFile = argv[iInFile];
     std::ifstream ifs (sInFile, std::fstream::in);
     if (!ifs.is_open())
     {
@@ -117,7 +138,6 @@ void DoStuff (int argc, char* argv[])
     }
 
     std::string sOutFile (argv[iOutFile]);
-
     CMIDIHandler midiH (sInFile);
 
     if (midiH.Verify() != CMIDIHandler::StatusCode::Success)
@@ -168,6 +188,12 @@ void PrintUsage()
         "where <infile> is a text file containing instructions and directives\n"
         "and <outfile> is the name of a modified version of <infile> that \n"
         "contains a rhythm.\n\n"
+
+        "Usage 4 - Generate text file to contain generic random melodies:\n\n"
+
+        "    SMFFTI.exe -grm <outfile>\n\n"
+
+        "Consult the manual for more information on all the above operations.\n\n"
         ;
 
     printf (text);

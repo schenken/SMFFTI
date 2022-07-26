@@ -69,8 +69,7 @@ public:
 		InvalidFunkStrumVelDeclineIncrementValue,
 		MaxFourBarsPerLine,
 		OutputFileAlreadyExists,
-		InvalidMelodyModeValue,
-		InvalidSimpleGrooveValue
+		InvalidMelodyModeValue
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -85,6 +84,8 @@ public:
 	// Generate a copy of the input file, but with it containing a
 	// randomly-generated rhythm.
 	StatusCode CopyFileWithRhythm (std::string filename, bool bOverwriteOutFile);
+
+	StatusCode GenRandMelodies (std::string filename, bool bOverwriteOutFile);
 
 	std::string GetStatusMessage();
 
@@ -211,6 +212,12 @@ private:
 	uint32_t _melodyModeLineNum = 0;
 	std::vector<uint8_t> _vRandomMelodyNotes;
 	std::vector<std::string> _vMelodyChordNames;
+
+	// Random Rhythm (-rr) mode: The bigger the number, the more sace chars.
+	// will appear in the rhythm pattern. This is a percentage, so to speak,
+	// so at 50 the pattern will consist roughly half and half space chars
+	// and '#' chars. At 25%, there will be less spaces chars.
+	uint32_t _nRandomRhythmSpaceThreshold = 50;
 
 	std::string _sTrackName = "Made by SMFFTI";
 
