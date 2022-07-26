@@ -69,7 +69,8 @@ public:
 		InvalidFunkStrumVelDeclineIncrementValue,
 		MaxFourBarsPerLine,
 		OutputFileAlreadyExists,
-		InvalidMelodyModeValue
+		InvalidMelodyModeValue,
+		InvalidNoteLenBiasValuesString
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -225,6 +226,19 @@ private:
 
 	// Randomizer
 	std::random_device _rdev;
+
+	// Randomized Rhythm (-rr):
+	// Defines the choices for note and gap lengths. Specifies the
+	// number of 32nd, 16th, 8th, 1/4, 1/2 and whole notes, from
+	// left-to-right in the string.
+	// NB. *ALWAYS* specify at least ONE 32nd (the last in the list).
+	std::string _sNoteLenBias = "1, 1, 8, 16, 16, 8";
+	std::string _sGapLenBias  = "0, 0, 1, 1, 16, 8";
+	//
+	// Note On or Off (Gap) Bias: First value is number of zeros (off),
+	// second values is ones (on). If both have same number, that's a
+	// 50/50 chance of on/off.
+	std::string _sNoteOnOffBias = "1, 1";
 
 	const std::string sRuler = "[......|.......|.......|.......]";
 

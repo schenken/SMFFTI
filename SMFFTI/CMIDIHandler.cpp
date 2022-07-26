@@ -510,16 +510,6 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_melodyModeLineNum = nLineNum;
 				continue;
 			}
-			else if (vKeyValue[0] == "RandomRhythmSpaceThreshold")
-			{
-				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 99))
-				{
-					_sStatusMessage = "Invalid +RandomRhythmSpaceThreshold value (range 1-99).";
-					return StatusCode::RandomRhythmSpaceThreshold;
-				}
-				_nRandomRhythmSpaceThreshold = nVal;
-				continue;
-			}
 			else
 			{
 				std::string p = sLine.substr (1, sTemp.size() - 1);
@@ -641,42 +631,40 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithRhythm (std::string filename,
 		return StatusCode::OutputFileAlreadyExists;
 	}
 
-	//-------------------------------------------------------------------------
-	// Randomizer definitions for Notes.
-	std::vector<uint32_t> vNoteLenChoice =
-	{
-		//32, 16, 
-		//8, 8, 8, 8, 8, 8, 8, 8,
-		//4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-		//4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-		//4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-		//2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-		//2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-	};
-
-	//-------------------------------------------------------------------------
-	// Randomizer definitions for Gaps - less chance of long gaps
-	std::vector<uint32_t> vGapLenChoice =
-	{
-		//2, 2, 1, 1
-		//8, 8, 8, 8, 8, 8, 8, 8,
-		//4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-		//2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-	};
 
 
-	//-------------------------------------------------------------------------
-	// This important for good groove/syncopation. There will ALWAYS be gaps
-	// on off-beat 1/32nds, and if you have ZERO chance of gaps (no zeroes specified
-	// in this list) you will get straight 1/16th note staccato.
-	std::vector<uint32_t> vNoteOrGap =
+	//--------------------------------------------------------------------------
+	// Init randomizer vectors
+	auto InitRandVectors = [](std::string s)
 	{
-		0, 0, 0, 0, 0, 0, 0, 0,
-		1, 1, 1, 1, 1, 1, 1, 1,
-		1, 1, 1, 1, 1, 1, 1, 1,
+		std::vector<uint32_t> vOut;
+		std::vector<std::string> v = akl::Explode (s, ",");
+		uint32_t nVal = 32;
+		for (uint8_t i = 0; i < 6; i++)
+		{
+			uint32_t nCount = std::stoi (v[i]);
+			for (uint32_t j = 0; j < nCount; j++)
+				vOut.push_back (nVal);
+
+			nVal = nVal >> 1;
+		}
+		return vOut;
 	};
+	std::vector<uint32_t> vNoteLenChoice = InitRandVectors (_sNoteLenBias);
+	std::vector<uint32_t> vGapLenChoice = InitRandVectors (_sGapLenBias);
+
+
+	std::vector<uint32_t> vNoteOrGap;
+	std::vector<std::string> v = akl::Explode (_sNoteOnOffBias, ",");
+	for (uint8_t i = 0; i < 2; i++)
+	{
+		uint32_t nCount = std::stoi (v[i]);
+		for (uint32_t j = 0; j < nCount; j++)
+			vNoteOrGap.push_back (i);
+	}
+	//--------------------------------------------------------------------------
+
+
 	std::uniform_int_distribution<uint32_t> randNoteOrGap (0, vNoteOrGap.size() - 1);
 
 	// Lambda: Serves to return a length value for either a note position or a gap.
