@@ -87,23 +87,23 @@ void DoStuff (int argc, char* argv[])
 
     int8_t iInFile = 1, iOutFile = 2;
 
-    // Random Rhythm: Create modified version of commend file
+    // Auto Rhythm: Create modified version of commend file
     // to contain a rhythm (which is not connected with the
     // funk groove concept).
-    bool bRandRhythm = false;
-    if (std::string (argv[1]) == "-rr")
+    bool bAutoRhythm = false;
+    if (std::string (argv[1]) == "-ar")
     {
         if (argc < 4)
         {
             std::ostringstream ss;
-            ss << "Command specified incorrectly. The Random Rhythm command should be\n"
+            ss << "Command specified incorrectly. The Auto-Rhythm command should be\n"
                 << "something like:\n\n"
-                << "    SMFFTI.exe -rr mymidi.txt mymidi_groove.txt\n";
+                << "    SMFFTI.exe -ar mymidi.txt mymidi_groove.txt\n";
             PrintError (ss.str());
             return;
         }
 
-        bRandRhythm = true;
+        bAutoRhythm = true;
         iInFile = 2;
         iOutFile = 3;
     }
@@ -146,9 +146,9 @@ void DoStuff (int argc, char* argv[])
         return;
     }
 
-    if (bRandRhythm)
+    if (bAutoRhythm)
     {
-        if (midiH.CopyFileWithRhythm (sOutFile, bOverwriteOutFile) != CMIDIHandler::StatusCode::Success)
+        if (midiH.CopyFileWithAutoRhythm (sOutFile, bOverwriteOutFile) != CMIDIHandler::StatusCode::Success)
             PrintError (midiH.GetStatusMessage());
         return;
     }
@@ -181,13 +181,13 @@ void PrintUsage()
 
         "where <outfile> is the name of the text command file.\n\n"
 
-        "Usage 3 - Generate modified text command file to contain a random rhythm:\n\n"
+        "Usage 3 - Generate modified text command file to contain an auto-rhythm:\n\n"
 
-        "    SMFFTI.exe -rr <infile> <outfile>\n\n"
+        "    SMFFTI.exe -ar <infile> <outfile>\n\n"
 
         "where <infile> is a text file containing instructions and directives\n"
         "and <outfile> is the name of a modified version of <infile> that \n"
-        "contains a rhythm.\n\n"
+        "contains an automatically-generated rhythm.\n\n"
 
         "Usage 4 - Generate text file to contain generic random melodies:\n\n"
 

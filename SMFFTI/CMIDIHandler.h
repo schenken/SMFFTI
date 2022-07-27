@@ -70,7 +70,9 @@ public:
 		MaxFourBarsPerLine,
 		OutputFileAlreadyExists,
 		InvalidMelodyModeValue,
-		InvalidNoteLenBiasValuesString
+		InvalidAutoRhythmNoteLenBias,
+		InvalidAutoRhythmGapLenBias,
+		InvalidAutoRhythmConsecutiveNoteChancePercentage
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -84,7 +86,7 @@ public:
 
 	// Generate a copy of the input file, but with it containing a
 	// randomly-generated rhythm.
-	StatusCode CopyFileWithRhythm (std::string filename, bool bOverwriteOutFile);
+	StatusCode CopyFileWithAutoRhythm (std::string filename, bool bOverwriteOutFile);
 
 	StatusCode GenRandMelodies (std::string filename, bool bOverwriteOutFile);
 
@@ -119,6 +121,8 @@ private:
 	void PushText (const std::string& s);
 
 	std::vector<std::string> TokenizeNotePosStr (std::string notePosStr);
+
+	bool ValidBiasParam (std::string& str, uint8_t numValues);
 
 	// File with MIDI content directives.
 	std::string _sInputFile;
@@ -214,12 +218,6 @@ private:
 	std::vector<uint8_t> _vRandomMelodyNotes;
 	std::vector<std::string> _vMelodyChordNames;
 
-	// Random Rhythm (-rr) mode: The bigger the number, the more sace chars.
-	// will appear in the rhythm pattern. This is a percentage, so to speak,
-	// so at 50 the pattern will consist roughly half and half space chars
-	// and '#' chars. At 25%, there will be less spaces chars.
-	uint32_t _nRandomRhythmSpaceThreshold = 50;
-
 	std::string _sTrackName = "Made by SMFFTI";
 
 	std::string _sStatusMessage = "";
@@ -227,18 +225,22 @@ private:
 	// Randomizer
 	std::random_device _rdev;
 
-	// Randomized Rhythm (-rr):
+	// Auto-Rhythm (-ar): Three params for controlling the articulation
+	// of the groove/syncopation. The defaults set here are for a
+	// reasonably groovy rhythm, suitable for bass guitar, for example.
+	//
 	// Defines the choices for note and gap lengths. Specifies the
 	// number of 32nd, 16th, 8th, 1/4, 1/2 and whole notes, from
 	// left-to-right in the string.
 	// NB. *ALWAYS* specify at least ONE 32nd (the last in the list).
-	std::string _sNoteLenBias = "1, 1, 8, 16, 16, 8";
-	std::string _sGapLenBias  = "0, 0, 1, 1, 16, 8";
+	std::string _sAutoRhythmNoteLenBias = "0, 0, 8, 16, 16, 4";
+	std::string _sAutoRhythmGapLenBias = "0, 0, 0, 4, 8, 1";
 	//
-	// Note On or Off (Gap) Bias: First value is number of zeros (off),
-	// second values is ones (on). If both have same number, that's a
-	// 50/50 chance of on/off.
-	std::string _sNoteOnOffBias = "1, 1";
+	// Percentage chance of* consecutive* notes.
+	// 0 means alternating notes and gaps.
+	// 50 means 50 % chance of consecutive notes, ie.no gap in - between.
+	// 100 means no gaps (except even-numbered 32nds, when no note is possible).
+	uint32_t _sAutoRhythmConsecutiveNoteChancePercentage = 35;
 
 	const std::string sRuler = "[......|.......|.......|.......]";
 

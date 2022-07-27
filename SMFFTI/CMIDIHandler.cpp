@@ -510,6 +510,33 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_melodyModeLineNum = nLineNum;
 				continue;
 			}
+			else if (vKeyValue[0] == "AutoRhythmNoteLenBias")
+			{
+				_sAutoRhythmNoteLenBias = vKeyValue[1];
+				if (!ValidBiasParam (_sAutoRhythmNoteLenBias, 6))
+				{
+					_sStatusMessage = "Invalid +AutoRhythmNoteLenBias parameter.";
+					return StatusCode::InvalidAutoRhythmNoteLenBias;
+				}
+			}
+			else if (vKeyValue[0] == "AutoRhythmGapLenBias")
+			{
+				_sAutoRhythmGapLenBias = vKeyValue[1];
+				if (!ValidBiasParam (_sAutoRhythmGapLenBias, 6))
+				{
+					_sStatusMessage = "Invalid +AutoRhythmGapLenBias parameter.";
+					return StatusCode::InvalidAutoRhythmGapLenBias;
+				}
+			}
+			else if (vKeyValue[0] == "AutoRhythmConsecutiveNoteChancePercentage")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100))
+				{
+					_sStatusMessage = "Invalid +AutoRhythmConsecutiveNoteChancePercentage value (range 1-100).";
+					return StatusCode::InvalidAutoRhythmConsecutiveNoteChancePercentage;
+				}
+				_sAutoRhythmConsecutiveNoteChancePercentage = std::stoi (vKeyValue[1]);
+			}
 			else
 			{
 				std::string p = sLine.substr (1, sTemp.size() - 1);
@@ -618,7 +645,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 	return result;
 }
 
-CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithRhythm (std::string filename, bool bOverwriteOutFile)
+CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoRhythm (std::string filename, bool bOverwriteOutFile)
 {
 	StatusCode nRes = StatusCode::Success;
 
@@ -626,12 +653,10 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithRhythm (std::string filename,
 	{
 		std::ostringstream ss;
 		ss << "Output file already exists. Use the -o switch to overwrite, eg:\n"
-			<< "SMFFTI.exe -rr mymidi.txt mymidi_rhythm.txt -o";
+			<< "SMFFTI.exe -ar mymidi.txt mymidi_rhythm.txt -o";
 		_sStatusMessage = ss.str();
 		return StatusCode::OutputFileAlreadyExists;
 	}
-
-
 
 	//--------------------------------------------------------------------------
 	// Init randomizer vectors
@@ -650,24 +675,27 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithRhythm (std::string filename,
 		}
 		return vOut;
 	};
-	std::vector<uint32_t> vNoteLenChoice = InitRandVectors (_sNoteLenBias);
-	std::vector<uint32_t> vGapLenChoice = InitRandVectors (_sGapLenBias);
+	std::vector<uint32_t> vNoteLenChoice = InitRandVectors (_sAutoRhythmNoteLenBias);
+	std::vector<uint32_t> vGapLenChoice = InitRandVectors (_sAutoRhythmGapLenBias);
 
-
-	std::vector<uint32_t> vNoteOrGap;
-	std::vector<std::string> v = akl::Explode (_sNoteOnOffBias, ",");
-	for (uint8_t i = 0; i < 2; i++)
-	{
-		uint32_t nCount = std::stoi (v[i]);
-		for (uint32_t j = 0; j < nCount; j++)
-			vNoteOrGap.push_back (i);
-	}
+	std::vector<uint32_t> vNoteOrGap (100);
+	for (uint32_t i = 0; i < _sAutoRhythmConsecutiveNoteChancePercentage; i++)
+		vNoteOrGap[i] = 1;
 	//--------------------------------------------------------------------------
-
 
 	std::uniform_int_distribution<uint32_t> randNoteOrGap (0, vNoteOrGap.size() - 1);
 
 	// Lambda: Serves to return a length value for either a note position or a gap.
+	//
+	// maxNoteLen: The theoretical largest note length permitted - this is dependent upon where
+	// in the bar the note position is, eg. a whole note is possible only if the note
+	// position is right at the start of a bar.
+	//
+	// maxLen: The actual maximum length allowed. For instance, although a whole note might
+	// be possible, if another chord follows in the same bar, there won't be enough room
+	// for a whole note. maxLen reflects this.
+	//
+	// vChoice: The vector of numbers representing the choice of random values possible.
 	auto RandLen = [&](uint8_t maxNoteLen, uint8_t maxLen, std::vector<uint32_t> vChoice)
 	{
 		uint32_t nIndex = 0;
@@ -711,7 +739,6 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithRhythm (std::string filename,
 			n++;
 		}
 
-
 		for (uint32_t i = 0; i < vPlusSignPos.size(); i++)
 		{
 			uint8_t nStart = vPlusSignPos[i];
@@ -719,7 +746,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithRhythm (std::string filename,
 				vPlusSignPos[i + 1] : (uint8_t)it.size() - 1;
 
 			uint32_t j = nStart;
-			uint8_t noteOn = 1;
+			bool bNoteOn = true, bPrevNoteOn = false;
 			while (j < nEnd)
 			{
 				uint8_t maxLen = nEnd - j;
@@ -739,39 +766,40 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithRhythm (std::string filename,
 					nLargestNoteLen = 1;
 
 				// Randomize whether to create a note, or a gap.
-				noteOn = j == nStart ? 1 : vNoteOrGap[randNoteOrGap (_eng)];
+				bNoteOn = j == nStart ? 1 : vNoteOrGap[randNoteOrGap (_eng)];
+
+				// NB. No consecutive gaps. Consecutive notes, yes, (if _sAutoRhythmNoteChancePercentage non-zero)
+				// but not gaps. Sussing this was a bit improvement. So remember, Andrew, a value of zero fof
+				// AutoRhythmNoteConsecutiveChancePercentage does NOT mean NO GAPS (which would be a bit 
+				// pointless anyway) - it means what it says: No consecutive notes; there will always be
+				// a gap in between, thanks to this critical condition here.
+				if (!bPrevNoteOn)
+					bNoteOn = true;
 
 				// No notes starting on off-beat 1/32nds; 
 				// that is, all notes starting on even-numbered 1/32nds.
 				// (This is IMPORTANT for proper syncopation.)
 				if (nLargestNoteLen == 1)
-					noteOn = 0;
+					bNoteOn = false;
 
-				uint8_t nl = RandLen (nLargestNoteLen, maxLen, noteOn ? vNoteLenChoice : vGapLenChoice);
+				uint8_t nl = RandLen (nLargestNoteLen, maxLen, bNoteOn ? vNoteLenChoice : vGapLenChoice);
 
 				// Output the note/gap chars.
 				uint32_t m = j + nl;
-				char ch = noteOn ? '+' : ' ';
+				char ch = bNoteOn ? '+' : ' ';
 				for (uint32_t k = j; k < m; k++)
 				{
 					it[k] = ch;
-					ch = noteOn ? '#' : ' ';
+					ch = bNoteOn ? '#' : ' ';
 				}
 
-				if (noteOn)
+				if (bNoteOn)
 					vChordRepCount[i]++;
 
-				//if (noteOn == 1)
-				//	noteOn = 0;
-				//else
-				//	noteOn = 1;
-
+				bPrevNoteOn = bNoteOn;
 
 				j = m;
-				int ak = 1;
 			}
-
-			int ak = 1;
 		}
 
 		std::string newChordList;
@@ -2180,6 +2208,59 @@ std::vector<std::string> CMIDIHandler::TokenizeNotePosStr (std::string notePosSt
 		vT.push_back (sTemp);
 
 	return vT;
+}
+
+bool CMIDIHandler::ValidBiasParam (std::string& str, uint8_t numValues)
+{
+	// The 'bias' parameter string (AutoRhythmNoteLenBias, AutoRhythmGapLenBias
+	// AutoRhythmNoteOnOffBias) is expected to be a comma-separated list of
+	// integer values.
+	//
+	// AutoRhythmNoteLenBias should be a set of 6 numbers. Each number represents 
+	// the relative chance of the note being a given length where, from left to right,
+	// the numbers pertain to whole-notes, half-notes, quarter-notes, eight-notes,
+	// sixteenth-notes and thirty-second-notes. For example, if the parameter string 
+	// is "1, 1, 1, 10, 1, 1" it means that the length of a note has a much greater 
+	// chance of being an eighth-note.
+	//
+	// Exactly the same applies to AutoRhythmGapLenBias, except it pertains to the
+	// length of the space between notes.
+	//
+
+	bool bOk = true;
+
+	std::vector<std::string> v = akl::Explode (str, ",");
+	if (v.size() != numValues)
+		return false;
+
+	std::string str2;
+	std::string comma;
+	for (uint32_t i = 0; i < v.size(); i++)
+	{
+		int32_t nVal;
+		if (!akl::VerifyTextInteger (v[i], nVal, 0, 1000))
+			return false;
+
+		// Absolute hack: To prevent endless loop, in the case of AutoRhythmNoteLenBias
+		// and AutoRhythmGapLenBias, ensure that there is at least one instance for the
+		// 32nds values. That is, a parameter value of, for example, "1, 1, 1, 1, 1, 0"
+		// will cause loop, so this would be changed to "1, 1, 1, 1, 1, 1". This is
+		// all about guaranteeing that we can have a note or gap length of 1/32nd when
+		// necessary. Can't easily think of a way around this for now.
+		// If you really do not want to have any 32nd notes/gaps, specify big numbers
+		// (eg. 1000) for the other values - this should virtually exclude 32nds.
+		if (i == v.size() - 1 && nVal == 0)
+			v[i] = "1";
+
+		// Reconstruct param string for sake of dreadful hack mentioned above.
+		str2 += comma + v[i];
+		comma = ", ";
+	}
+
+	// The input string is modified.
+	str = str2;
+
+	return bOk;
 }
 
 std::string CMIDIHandler::GetStatusMessage()
