@@ -499,15 +499,15 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_nFunkStrumVelDeclineIncrement = nVal;
 				continue;
 			}
-			else if (vKeyValue[0] == "MelodyMode")
+			else if (vKeyValue[0] == "AutoMelody")
 			{
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
 				{
-					_sStatusMessage = "Invalid +MelodyMode value (valid: 0 or 1).";
-					return StatusCode::InvalidMelodyModeValue;
+					_sStatusMessage = "Invalid +AutoMelody value (valid: 0 or 1).";
+					return StatusCode::InvalidAutoMelodyValue;
 				}
-				_bMelodyMode = nVal == 1;
-				_melodyModeLineNum = nLineNum;
+				_bAutoMelody = nVal == 1;
+				_autoMelodyLineNum = nLineNum;
 				continue;
 			}
 			else if (vKeyValue[0] == "AutoRhythmNoteLenBias")
@@ -1105,7 +1105,7 @@ void CMIDIHandler::GenerateNoteEvents()
 	// so it can be reused.
 	std::ofstream ofs;
 	std::string sMelodySaveFile = _sInputFile;
-	if (_bMelodyMode)
+	if (_bAutoMelody)
 	{
 		std::string ts = akl::TimeStamp();
 		std::string::size_type pos = _sInputFile.find_last_of ('.');
@@ -1232,7 +1232,7 @@ void CMIDIHandler::GenerateNoteEvents()
 
 			//---------------------------------------------------------------------
 			// Dump the melody notes to file so user can copy the melody.
-			if (i == 1 && _bMelodyMode)
+			if (i == 1 && _bAutoMelody)
 			{
 				for (size_t j = 0; j < _vBarCount[nItem]; j++)
 					ofs << sRuler;
@@ -1284,7 +1284,7 @@ void CMIDIHandler::GenerateNoteEvents()
 		_nNoteCount = nNote;
 	}
 
-	if (_bMelodyMode)
+	if (_bAutoMelody)
 		ofs.close();
 }
 
@@ -1954,10 +1954,10 @@ void CMIDIHandler::AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSe
 
 
 
-	// MelodyMode: Instead of chords, output a random note
+	// AutoMelody: Instead of chords, output a random note
 	// from the Major/Minor Pentatonic scale of the chord.
 	// (No position offset is applicable.)
-	if (_bMelodyMode)
+	if (_bAutoMelody)
 	{
 		// Notes (semitone intervals) that can be used in the melody.
 		// Essentially, Major or Minor Pentatonic.

@@ -69,7 +69,7 @@ public:
 		InvalidFunkStrumVelDeclineIncrementValue,
 		MaxFourBarsPerLine,
 		OutputFileAlreadyExists,
-		InvalidMelodyModeValue,
+		InvalidAutoMelodyValue,
 		InvalidAutoRhythmNoteLenBias,
 		InvalidAutoRhythmGapLenBias,
 		InvalidAutoRhythmConsecutiveNoteChancePercentage
@@ -213,8 +213,8 @@ private:
 	double _nFunkStrumUpStrokeAttenuation = 1.0;
 	uint8_t _nFunkStrumVelDeclineIncrement = 5;
 
-	bool _bMelodyMode = 0;
-	uint32_t _melodyModeLineNum = 0;
+	bool _bAutoMelody = 0;
+	uint32_t _autoMelodyLineNum = 0;
 	std::vector<uint8_t> _vRandomMelodyNotes;
 	std::vector<std::string> _vMelodyChordNames;
 
