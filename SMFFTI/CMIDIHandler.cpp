@@ -743,7 +743,8 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoRhythm (std::string filen
 		{
 			uint8_t nStart = vPlusSignPos[i];
 			uint8_t nEnd = (i < vPlusSignPos.size() - 1) ? 
-				vPlusSignPos[i + 1] : (uint8_t)it.size() - 1;
+				vPlusSignPos[i + 1] : (uint8_t)it.size();
+				//vPlusSignPos[i + 1] : (uint8_t)it.size() - 1;
 
 			uint32_t j = nStart;
 			bool bNoteOn = true, bPrevNoteOn = false;
@@ -766,6 +767,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoRhythm (std::string filen
 					nLargestNoteLen = 1;
 
 				// Randomize whether to create a note, or a gap.
+				// *Always* place note at start of bar.
 				bNoteOn = j == nStart ? 1 : vNoteOrGap[randNoteOrGap (_eng)];
 
 				// NB. No consecutive gaps. Consecutive notes, yes, (if _sAutoRhythmNoteChancePercentage non-zero)
@@ -2270,6 +2272,8 @@ std::string CMIDIHandler::GetStatusMessage()
 
 //-----------------------------------------------------------------------------
 // Static class members
+
+std::string CMIDIHandler::_version = "0.2";
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
 std::map<std::string, uint8_t>CMIDIHandler::_mChromaticScale;

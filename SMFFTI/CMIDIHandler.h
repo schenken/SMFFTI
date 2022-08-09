@@ -92,6 +92,8 @@ public:
 
 	std::string GetStatusMessage();
 
+	static std::string _version;
+
 private:
 	std::string GetRandomGroove (bool& bRandomGroove);
 	void GenerateNoteEvents();
@@ -233,14 +235,14 @@ private:
 	// number of 32nd, 16th, 8th, 1/4, 1/2 and whole notes, from
 	// left-to-right in the string.
 	// NB. *ALWAYS* specify at least ONE 32nd (the last in the list).
-	std::string _sAutoRhythmNoteLenBias = "0, 0, 8, 16, 16, 4";
+	std::string _sAutoRhythmNoteLenBias = "0, 0, 4, 8, 4, 1";
 	std::string _sAutoRhythmGapLenBias = "0, 0, 0, 4, 8, 1";
 	//
-	// Percentage chance of* consecutive* notes.
+	// Percentage chance of *consecutive* notes.
 	// 0 means alternating notes and gaps.
 	// 50 means 50 % chance of consecutive notes, ie.no gap in - between.
 	// 100 means no gaps (except even-numbered 32nds, when no note is possible).
-	uint32_t _sAutoRhythmConsecutiveNoteChancePercentage = 35;
+	uint32_t _sAutoRhythmConsecutiveNoteChancePercentage = 25;
 
 	const std::string sRuler = "[......|.......|.......|.......]";
 

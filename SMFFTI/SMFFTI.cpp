@@ -36,13 +36,6 @@ int main (int argc, char* argv[])
         else
         {
             // TODO: code your application's behavior here.
-            if (argc < 3)
-            {
-                MessageBeep (MB_ICONERROR);
-                PrintUsage();
-                return 1;
-            }
-
             DoStuff (argc, argv);
         }
     }
@@ -58,6 +51,28 @@ int main (int argc, char* argv[])
 
 void DoStuff (int argc, char* argv[])
 {
+    if (argc < 2)
+    {
+        MessageBeep (MB_ICONERROR);
+        PrintUsage();
+        return;
+    }
+
+    if (std::string (argv[1]) == "-v" || std::string (argv[1]) == "-version")
+    {
+        std::ostringstream ss;
+        ss << "Version " << CMIDIHandler::_version << "\n\n";
+        std::cout << ss.str();
+        return;
+    }
+
+    if (argc < 3)
+    {
+        MessageBeep (MB_ICONERROR);
+        PrintUsage();
+        return;
+    }
+
     bool bOverwriteOutFile = false;
     if (argc > 3)
     {
@@ -140,6 +155,13 @@ void DoStuff (int argc, char* argv[])
     std::string sOutFile (argv[iOutFile]);
     CMIDIHandler midiH (sInFile);
 
+    // Safety
+    if (sInFile == sOutFile)
+    {
+        PrintError ("Input and output filenames must not be the same.");
+        return;
+    }
+
     if (midiH.Verify() != CMIDIHandler::StatusCode::Success)
     {
         PrintError (midiH.GetStatusMessage());
@@ -162,11 +184,12 @@ void DoStuff (int argc, char* argv[])
 
 void PrintUsage()
 {
-    const char* text =
+    std::ostringstream ss;
+    ss << 
 
         "\n"
-        "Simple MIDI Files From Text Input (SMFFTI)\n"
-        "------------------------------------------\n\n"
+        "Simple MIDI Files From Text Input (SMFFTI v" << CMIDIHandler::_version << ")\n"
+        "-----------------------------------------------\n\n"
 
         "Usage 1 - Create MIDI file from text command file:\n\n"
 
@@ -196,7 +219,7 @@ void PrintUsage()
         "Consult the manual for more information on all the above operations.\n\n"
         ;
 
-    printf (text);
+    std::cout << ss.str();
 }
 
 void PrintError (std::string sMsg)
