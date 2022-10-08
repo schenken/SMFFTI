@@ -40,6 +40,7 @@ public:
 		Success,
 		ParameterValueMissing,
 		InvalidBassNoteValue,
+		InvalidRootNoteOnlyValue,
 		NumberOfChordsDoesNotMatchNoteCount,
 		InvalidVelocityValue,
 		InvalidRandomVelocityVariationValue,
@@ -158,6 +159,7 @@ private:
 	uint8_t _nVelocity = 80;
 	uint8_t _nRandVelVariation = 0;
 	bool _bAddBassNote = false;
+	bool _bRootNoteOnly = false;
 	uint8_t _nRandNoteStartOffset = 0;
 	uint8_t _nRandNoteEndOffset = 0;
 	bool _bRandNoteStart = false;

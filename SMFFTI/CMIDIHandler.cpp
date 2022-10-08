@@ -347,6 +347,16 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_bAddBassNote = nVal == 1;
 				continue;
 			}
+			if (vKeyValue[0] == "RootNoteOnly")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
+				{
+					_sStatusMessage = "Invalid +RootNoteOnly value (valid: 0 or 1).";
+					return StatusCode::InvalidRootNoteOnlyValue;
+				}
+				_bRootNoteOnly = nVal == 1;
+				continue;
+			}
 			else if (vKeyValue[0] == "Velocity")
 			{
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 127))
@@ -2008,23 +2018,25 @@ void CMIDIHandler::AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSe
 	_vMIDINoteEvents.push_back (note);
 
 	// Chord notes
-	for each (auto item in vChordIntervals)
+	if (_bRootNoteOnly == false)
 	{
-		uint8_t nSemitones = std::stoi (item);
+		for each (auto item in vChordIntervals)
+		{
+			uint8_t nSemitones = std::stoi (item);
 
-		// Downward transposition occurs if note is higher than highest-note threshold, or 127.
-		uint16_t nNote = nRoot + nSemitones;
-		while (nNote > (_nProvisionalLowestNote + _nTransposeThreshold) || nNote > 127)
-			nNote -= 12;
+			// Downward transposition occurs if note is higher than highest-note threshold, or 127.
+			uint16_t nNote = nRoot + nSemitones;
+			while (nNote > (_nProvisionalLowestNote + _nTransposeThreshold) || nNote > 127)
+				nNote -= 12;
 
-		notePosOffset = (bNoteOn ? fnRandStart (nNoteSeq == 0) : fnRandEnd (nNoteSeq == _nNoteCount));
+			notePosOffset = (bNoteOn ? fnRandStart (nNoteSeq == 0) : fnRandEnd (nNoteSeq == _nNoteCount));
 
-		nET = nEventTime + notePosOffset;
+			nET = nEventTime + notePosOffset;
 
-		MIDINote note (nNoteSeq, nET, nEventType, (uint8_t)nNote, fnRandVel());
-		_vMIDINoteEvents.push_back (note);
-	};
-
+			MIDINote note (nNoteSeq, nET, nEventType, (uint8_t)nNote, fnRandVel());
+			_vMIDINoteEvents.push_back (note);
+		};
+	}
 }
 
 int8_t CMIDIHandler::NoteToMidi (std::string sNote, uint8_t& nNote, uint8_t& nSharpFlat)
@@ -2298,6 +2310,9 @@ CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 	_mChordTypes.insert (std::pair<std::string, std::string>("sus4",	"5,7"));
 	_mChordTypes.insert (std::pair<std::string, std::string>("7sus4",   "5,7,10"));
 	_mChordTypes.insert (std::pair<std::string, std::string>("5",       "7"));				// Power chord
+	_mChordTypes.insert (std::pair<std::string, std::string>("dim",		"3, 6"));			// Diminished
+	_mChordTypes.insert (std::pair<std::string, std::string>("dim7",	"3, 6, 9"));		// Diminished 7th
+	_mChordTypes.insert (std::pair<std::string, std::string>("m7b5",	"3, 6, 10"));		// Half-Diminished 7th
 
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("C", 0));
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("C#", 1));
