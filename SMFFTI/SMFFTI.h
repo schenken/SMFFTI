@@ -6,6 +6,12 @@ SMFFTI - Simple MIDI Files From Text Input
 
 See the User Guide for everything you need to know about using it.
 
+v0.3	October 17, 2022
+(1) +RootNoteOnly option added.
+(2) Three new chord types: Diminished, Diminished 7th, Half-diminished.
+(3) Auto-melody: For major/minor chords, biasing of note choice: Firstly root,
+then fifth, then third, and finally the other two pentatonic notes. For the
+suspended/diminished chords, pentatonic notes are NOT used, but biasing is applied.
 
 v0.2	July 30, 2022
 Features added to the initial version: (1) Auto-Rhythm (-ar) mode to create randomized rhythms.

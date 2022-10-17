@@ -107,7 +107,7 @@ private:
 	void AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSeq, std::string chordName, bool& bNoteOn, uint32_t nEventTime);
 	int8_t NoteToMidi (std::string sNote, uint8_t& nNote, uint8_t& nSharpFlat);
 
-	bool GetChordIntervals (std::string sChordName, uint8_t& nRoot, std::vector<std::string>& vChordIntervals);
+	bool GetChordIntervals (std::string sChordName, uint8_t& nRoot, std::vector<std::string>& vChordIntervals, std::string& sChordType);
 
 	StatusCode InitMidiFile (std::ofstream& ofs, const std::string& filename, bool bOverwriteOutFile);
 	void FinishMidiFile (std::ofstream& ofs);
@@ -255,6 +255,11 @@ private:
 	static struct ClassMemberInit { ClassMemberInit(); } cmi;
 
 	static std::map<std::string, std::string>_mChordTypes;
+	
+	// For each chord type, list of notes from the scale (semitone values)
+	// that can be used for auto-melody.
+	static std::map<std::string, std::vector<uint8_t>> _mMelodyNotes;
+
 	static std::map<std::string, uint8_t>_mChromaticScale;
 
 	static std::vector<std::string> _vRFGChords;

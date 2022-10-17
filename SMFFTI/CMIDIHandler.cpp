@@ -284,7 +284,8 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				if (ChordRepeat (c, nNumInstances))
 					sChordName = c.substr (0, c.find ('('));
 
-				if (!GetChordIntervals (sChordName, nRoot, vChordIntervals))
+				std::string sChordType;
+				if (!GetChordIntervals (sChordName, nRoot, vChordIntervals, sChordType))
 				{
 					std::ostringstream ss;
 					ss << "Line " << nLineNum << ": Invalid/blank chord name: " << sChordName;
@@ -1917,7 +1918,8 @@ void CMIDIHandler::AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSe
 
 	std::vector<std::string> vChordIntervals;
 	uint8_t nRoot = 0;
-	GetChordIntervals (chordName, nRoot, vChordIntervals);
+	std::string sChordType;
+	GetChordIntervals (chordName, nRoot, vChordIntervals, sChordType);
 
 
 	// Init note stagger offset. If value positive, start with lowest note; if negative,
@@ -1973,9 +1975,11 @@ void CMIDIHandler::AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSe
 	{
 		// Notes (semitone intervals) that can be used in the melody.
 		// Essentially, Major or Minor Pentatonic.
-		std::vector<uint8_t> vNotes = { 0, 2, 4, 7, 9 };
-		if (vChordIntervals[0] == "3")
-			vNotes = { 0, 3, 5, 7, 10 };
+		auto it = _mMelodyNotes.find (sChordType);
+
+		std::vector<uint8_t> vNotes = it->second; // { 0, 2, 4, 7, 9 };
+		//if (vChordIntervals[0] == "3")
+		//	vNotes = { 0, 3, 5, 7, 10 };
 
 		std::uniform_int_distribution<uint32_t> randNote (0, vNotes.size() - 1);
 
@@ -1990,7 +1994,9 @@ void CMIDIHandler::AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSe
 			_vMelodyChordNames.push_back (chordName);
 		}
 
-		MIDINote note (nNoteSeq, nEventTime, nEventType, nNote, fnRandVel());
+		notePosOffset = (bNoteOn ? fnRandStart (nNoteSeq == 0) : fnRandEnd (nNoteSeq == _nNoteCount));
+		nET = nEventTime + notePosOffset;
+		MIDINote note (nNoteSeq, nET, nEventType, nNote, fnRandVel());
 		_vMIDINoteEvents.push_back (note);
 		return;
 	}
@@ -2075,7 +2081,8 @@ int8_t CMIDIHandler::NoteToMidi (std::string sNote, uint8_t& nNote, uint8_t& nSh
 	return 0;
 }
 
-bool CMIDIHandler::GetChordIntervals (std::string sChordName, uint8_t& nRoot, std::vector<std::string>& vChordIntervals)
+bool CMIDIHandler::GetChordIntervals (std::string sChordName, uint8_t& nRoot, 
+	std::vector<std::string>& vChordIntervals, std::string& sChordType)
 {
 	bool bOK = true;
 
@@ -2105,7 +2112,8 @@ bool CMIDIHandler::GetChordIntervals (std::string sChordName, uint8_t& nRoot, st
 	if (it == _mChordTypes.end())
 		return false;
 
-	vChordIntervals = akl::Explode (_mChordTypes[chordType], ",");
+	vChordIntervals = akl::Explode (it->second, ",");
+	sChordType = it->first;
 
 	return bOK;
 }
@@ -2285,9 +2293,10 @@ std::string CMIDIHandler::GetStatusMessage()
 //-----------------------------------------------------------------------------
 // Static class members
 
-std::string CMIDIHandler::_version = "0.2";
+std::string CMIDIHandler::_version = "0.3";
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
+std::map<std::string, std::vector<uint8_t>>CMIDIHandler::_mMelodyNotes;
 std::map<std::string, uint8_t>CMIDIHandler::_mChromaticScale;
 std::vector<std::string>CMIDIHandler::_vRFGChords;
 
@@ -2313,6 +2322,33 @@ CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 	_mChordTypes.insert (std::pair<std::string, std::string>("dim",		"3, 6"));			// Diminished
 	_mChordTypes.insert (std::pair<std::string, std::string>("dim7",	"3, 6, 9"));		// Diminished 7th
 	_mChordTypes.insert (std::pair<std::string, std::string>("m7b5",	"3, 6, 10"));		// Half-Diminished 7th
+
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("maj",    { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("7",      { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("maj7",   { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("9",      { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("maj9",   { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("add9",   { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("m",      { 0, 0, 0, 3, 5, 5, 7, 7, 7, 10 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("m7",     { 0, 0, 0, 3, 5, 5, 7, 7, 7, 10 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("m9",     { 0, 0, 0, 3, 5, 5, 7, 7, 7, 10 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("madd9",  { 0, 0, 0, 3, 5, 5, 7, 7, 7, 10 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("sus2",   { 0, 0, 0, 0, 2, 2, 7, 7, 7 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("7sus2",  { 0, 0, 0, 0, 2, 2, 7, 7, 7, 10 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("sus4",   { 0, 0, 0, 0, 5, 5, 7, 7, 7 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("7sus4",  { 0, 0, 0, 0, 5, 5, 7, 7, 7, 10 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("5",      { 0, 0, 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("dim",    { 0, 0, 0, 0, 0, 3, 3, 6, 6 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("dim7",   { 0, 0, 0, 0, 0, 3, 3, 6, 6, 9 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("m7b5",   { 0, 0, 0, 0, 0, 3, 3, 6, 6, 10 } ));
+
+	// Sanity check that _mMelodyNotes corresponds correctly to _mChordTypes.
+	for each (auto ct in _mChordTypes)
+	{
+		std::map<std::string, std::vector<uint8_t>>::iterator it;
+		it = _mMelodyNotes.find (ct.first);
+		ASSERT (it != _mMelodyNotes.end());
+	}
 
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("C", 0));
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("C#", 1));
