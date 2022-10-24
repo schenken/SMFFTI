@@ -6,6 +6,9 @@ SMFFTI - Simple MIDI Files From Text Input
 
 See the User Guide for everything you need to know about using it.
 
+v0.31	October 24, 2022
+Added command file parameter +AllMelodyNotes
+
 v0.3	October 17, 2022
 (1) +RootNoteOnly option added.
 (2) Three new chord types: Diminished, Diminished 7th, Half-diminished.

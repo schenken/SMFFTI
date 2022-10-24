@@ -73,7 +73,8 @@ public:
 		InvalidAutoMelodyValue,
 		InvalidAutoRhythmNoteLenBias,
 		InvalidAutoRhythmGapLenBias,
-		InvalidAutoRhythmConsecutiveNoteChancePercentage
+		InvalidAutoRhythmConsecutiveNoteChancePercentage,
+		InvalidAllMelodyNotesValue
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -221,6 +222,11 @@ private:
 	uint32_t _autoMelodyLineNum = 0;
 	std::vector<uint8_t> _vRandomMelodyNotes;
 	std::vector<std::string> _vMelodyChordNames;
+
+	// +AllMelodyNotes: To output ALL possible melody notes
+	// as a "chord", in order to see all notes in MIDI files
+	// and manually edit to create a melody.
+	bool _bAllMelodyNotes = false;
 
 	std::string _sTrackName = "Made by SMFFTI";
 
