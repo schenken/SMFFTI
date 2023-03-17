@@ -90,6 +90,10 @@ public:
 	// randomly-generated rhythm.
 	StatusCode CopyFileWithAutoRhythm (std::string filename, bool bOverwriteOutFile);
 
+	// 2303090952: Generate a copy of the input file, but with it containing a
+	// randomly-generated chords (over 4 bars).
+	StatusCode CopyFileWithAutoChords (std::string filename, bool bOverwriteOutFile);
+
 	StatusCode GenRandMelodies (std::string filename, bool bOverwriteOutFile);
 
 	std::string GetStatusMessage();
@@ -267,6 +271,9 @@ private:
 	static std::map<std::string, std::vector<uint8_t>> _mMelodyNotes;
 
 	static std::map<std::string, uint8_t>_mChromaticScale;
+
+	// 2303090952
+	static std::vector<std::string> _vChromaticScale;
 
 	static std::vector<std::string> _vRFGChords;
 

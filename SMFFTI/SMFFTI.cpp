@@ -123,6 +123,25 @@ void DoStuff (int argc, char* argv[])
         iOutFile = 3;
     }
 
+    // 2303090952 Auto-chords (-ac) command.
+    bool bAutoChords = false;
+    if (std::string (argv[1]) == "-ac")
+    {
+        if (argc < 4)
+        {
+            std::ostringstream ss;
+            ss << "Command specified incorrectly. The Auto-Chords command should be\n"
+                << "something like:\n\n"
+                << "    SMFFTI.exe -ac mymidi.txt mymidi_ac.txt\n";
+            PrintError (ss.str());
+            return;
+        }
+
+        bAutoChords = true;
+        iInFile = 2;
+        iOutFile = 3;
+    }
+
     // Generic Randomized Melodies (-grm)
     // (No input file required.)
     if (std::string (argv[1]) == "-grm")
@@ -171,6 +190,14 @@ void DoStuff (int argc, char* argv[])
     if (bAutoRhythm)
     {
         if (midiH.CopyFileWithAutoRhythm (sOutFile, bOverwriteOutFile) != CMIDIHandler::StatusCode::Success)
+            PrintError (midiH.GetStatusMessage());
+        return;
+    }
+
+    // 2303090952 Auto-Chords
+    if (bAutoChords)
+    {
+        if (midiH.CopyFileWithAutoChords (sOutFile, bOverwriteOutFile) != CMIDIHandler::StatusCode::Success)
             PrintError (midiH.GetStatusMessage());
         return;
     }

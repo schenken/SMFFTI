@@ -762,9 +762,9 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoRhythm (std::string filen
 		for (uint32_t i = 0; i < vPlusSignPos.size(); i++)
 		{
 			uint8_t nStart = vPlusSignPos[i];
-			uint8_t nEnd = (i < vPlusSignPos.size() - 1) ? 
+			uint8_t nEnd = (i < vPlusSignPos.size() - 1) ?
 				vPlusSignPos[i + 1] : (uint8_t)it.size();
-				//vPlusSignPos[i + 1] : (uint8_t)it.size() - 1;
+			//vPlusSignPos[i + 1] : (uint8_t)it.size() - 1;
 
 			uint32_t j = nStart;
 			bool bNoteOn = true, bPrevNoteOn = false;
@@ -858,6 +858,475 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoRhythm (std::string filen
 			// Output the rhythm version of note positions.
 			ofs << _vNotePositions[nLine2++] << std::endl;
 			ofs << vNewChordList[iNewChordList++] << std::endl;
+			bIgnoreNextLine = true;
+		}
+		else
+			ofs << s << std::endl;
+
+		nLine++;
+	}
+	ofs.close();
+
+	return nRes;
+}
+
+// 2303090953 Auto-Chords: Generate copy of original command file, complete with 4-bar sequence
+// of randomized chords and note lengths.
+CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filename, bool bOverwriteOutFile)
+{
+	StatusCode nRes = StatusCode::Success;
+
+	if (!bOverwriteOutFile && akl::MyFileExists (filename))
+	{
+		std::ostringstream ss;
+		ss << "Output file already exists. Use the -o switch to overwrite, eg:\n"
+			<< "SMFFTI.exe -ac mymidi.txt mymidi_ac.txt -o";
+		_sStatusMessage = ss.str();
+		return StatusCode::OutputFileAlreadyExists;
+	}
+
+	//--------------------------------------------------------------------------
+	// Use first mentioned chord as the key, from which to choose random chords.
+	std::string s = _vChordNames[0].substr (0, 1);
+	if (_vChordNames[0].size() > 1 && (_vChordNames[0][1] == 'b' || _vChordNames[0][1] == '#'))
+		s += _vChordNames[0][1];
+	//
+	// Is it a minor key.
+	bool bMinorKey = false;
+	size_t pos = _vChordNames[0].find ("m");
+	if (pos != std::string::npos)
+		bMinorKey = true;
+	//
+	// Create list of chords for the key
+
+	struct Chord
+	{
+		std::string sNote;
+		uint8_t iChordType; // 0=Major, 1=Minor, 2=Diminished
+
+		Chord (std::string n, uint8_t ct) : sNote (n), iChordType (ct) {}
+	};
+
+	std::vector<Chord> vChords;
+	auto it = std::find (_vChromaticScale.begin(), _vChromaticScale.end(), s);
+	uint32_t iChord = std::distance (_vChromaticScale.begin(), it);
+	//
+	// Build chord list. These are biased, meaning the better-sounding chords
+	// will feature more.
+	if (bMinorKey)
+	{
+		// Minor key intervals: T, S, T, T, S, T, T
+		//
+		// Root chord
+		for (uint32_t i = 0; i < 12; i++)
+		{
+			vChords.push_back (Chord (_vChromaticScale[iChord], 1));
+		}
+		//
+		// Other minor chords
+		for (uint32_t i = 0; i < 4; i++)
+		{
+			vChords.push_back (Chord (_vChromaticScale[iChord + 5], 1));
+			vChords.push_back (Chord (_vChromaticScale[iChord + 7], 1));
+		}
+		//
+		// Major chords
+		for (uint32_t i = 0; i < 4; i++)
+		{
+			vChords.push_back (Chord (_vChromaticScale[iChord + 3], 0));
+			vChords.push_back (Chord (_vChromaticScale[iChord + 8], 0));
+			vChords.push_back (Chord (_vChromaticScale[iChord + 10], 0));
+		}
+		//
+		// Diminished chords
+		vChords.push_back (Chord (_vChromaticScale[iChord + 2], 2));
+	}
+	else
+	{
+		// Major key intervals: T, T, S, T, T, T, S
+		//
+		// Root chord
+		for (uint32_t i = 0; i < 12; i++)
+			vChords.push_back (Chord (_vChromaticScale[iChord], 0));
+		//
+		// Other major chords
+		for (uint32_t i = 0; i < 6; i++)
+		{
+			vChords.push_back (Chord (_vChromaticScale[iChord + 5], 0));
+			vChords.push_back (Chord (_vChromaticScale[iChord + 7], 0));
+		}
+		//
+		// Minor chords
+		for (uint32_t i = 0; i < 4; i++)
+		{
+			vChords.push_back (Chord (_vChromaticScale[iChord + 2], 1));
+			vChords.push_back (Chord (_vChromaticScale[iChord + 4], 1));
+			vChords.push_back (Chord (_vChromaticScale[iChord + 9], 1));
+		}
+		//
+		// Diminished chords
+		vChords.push_back (Chord (_vChromaticScale[iChord + 11], 2));
+	}
+
+
+	// Construct list of chord variations. Biased toward the less exotic.
+	//
+	// Major chord variations.
+	std::vector<std::string> vMajorChordVariations;
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("");
+	vMajorChordVariations.push_back ("m");	// Modal Interchange
+	vMajorChordVariations.push_back ("m");	// Modal Interchange
+	vMajorChordVariations.push_back ("7");
+	vMajorChordVariations.push_back ("maj7");
+	vMajorChordVariations.push_back ("maj7");
+	vMajorChordVariations.push_back ("9");
+	vMajorChordVariations.push_back ("maj9");
+	vMajorChordVariations.push_back ("maj9");
+	vMajorChordVariations.push_back ("add9");
+	vMajorChordVariations.push_back ("add9");
+	vMajorChordVariations.push_back ("add9");
+	vMajorChordVariations.push_back ("add9");
+	vMajorChordVariations.push_back ("sus2");
+	vMajorChordVariations.push_back ("7sus2");
+	vMajorChordVariations.push_back ("sus4");
+	vMajorChordVariations.push_back ("7sus4");
+	//
+	// Minor chord variations.
+	std::vector<std::string> vMinorChordVariations;
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("m");
+	vMinorChordVariations.push_back ("");	// Modal Interchange
+	vMinorChordVariations.push_back ("");	// Modal Interchange
+	vMinorChordVariations.push_back ("m7");
+	vMinorChordVariations.push_back ("m7");
+	vMinorChordVariations.push_back ("m7");
+	vMinorChordVariations.push_back ("m7");
+	vMinorChordVariations.push_back ("m7");
+	vMinorChordVariations.push_back ("m7");
+	vMinorChordVariations.push_back ("m9");
+	vMinorChordVariations.push_back ("m9");
+	vMinorChordVariations.push_back ("madd9");
+	vMinorChordVariations.push_back ("madd9");
+	vMinorChordVariations.push_back ("madd9");
+	vMinorChordVariations.push_back ("madd9");
+	vMinorChordVariations.push_back ("sus2");
+	vMinorChordVariations.push_back ("7sus2");
+	vMinorChordVariations.push_back ("sus4");
+	vMinorChordVariations.push_back ("7sus4");
+	//
+	std::vector<std::string> vDimChordVariations;
+	vDimChordVariations.push_back ("dim7");
+	vDimChordVariations.push_back ("m7b5");
+	// NB. We never play a straight dim - always a dim7 or m7b5.
+
+
+	//--------------------------------------------------------------------------
+	// Begin with a string of 128 spaces. Each char, of course, represents 1/32nd note.
+	std::string sFourBars (128, ' ');
+
+	// Init note-length randomizer - range 4 - 32 (1/32nd notes).
+	std::vector<uint8_t> vNoteLen;
+	vNoteLen.push_back (4);
+	vNoteLen.push_back (5);
+	vNoteLen.push_back (6);
+	vNoteLen.push_back (7);
+	vNoteLen.push_back (8);
+	vNoteLen.push_back (9);
+	vNoteLen.push_back (10);
+	vNoteLen.push_back (11);
+	vNoteLen.push_back (12);
+	vNoteLen.push_back (13);
+	vNoteLen.push_back (14);
+	vNoteLen.push_back (15);
+	vNoteLen.push_back (16);
+	vNoteLen.push_back (17);
+	vNoteLen.push_back (18);
+	vNoteLen.push_back (19);
+	vNoteLen.push_back (20);
+	vNoteLen.push_back (21);
+	vNoteLen.push_back (22);
+	vNoteLen.push_back (23);
+	vNoteLen.push_back (24);
+	vNoteLen.push_back (25);
+	vNoteLen.push_back (26);
+	vNoteLen.push_back (27);
+	vNoteLen.push_back (28);
+	vNoteLen.push_back (29);
+	vNoteLen.push_back (30);
+	vNoteLen.push_back (31);
+	vNoteLen.push_back (32);
+	//
+	vNoteLen.push_back (5);
+	vNoteLen.push_back (6);
+	vNoteLen.push_back (7);
+	vNoteLen.push_back (8);
+	vNoteLen.push_back (9);
+	vNoteLen.push_back (10);
+	vNoteLen.push_back (11);
+	vNoteLen.push_back (12);
+	vNoteLen.push_back (13);
+	vNoteLen.push_back (14);
+	vNoteLen.push_back (15);
+	vNoteLen.push_back (16);
+	vNoteLen.push_back (17);
+	vNoteLen.push_back (18);
+	vNoteLen.push_back (19);
+	vNoteLen.push_back (20);
+	vNoteLen.push_back (21);
+	vNoteLen.push_back (22);
+	vNoteLen.push_back (23);
+	vNoteLen.push_back (24);
+	//vNoteLen.push_back (25);
+	//vNoteLen.push_back (26);
+	//vNoteLen.push_back (27);
+	//vNoteLen.push_back (28);
+	//vNoteLen.push_back (29);
+	//vNoteLen.push_back (30);
+	//vNoteLen.push_back (31);
+	//
+	vNoteLen.push_back (6);
+	vNoteLen.push_back (7);
+	vNoteLen.push_back (8);
+	vNoteLen.push_back (9);
+	vNoteLen.push_back (10);
+	vNoteLen.push_back (11);
+	vNoteLen.push_back (12);
+	vNoteLen.push_back (13);
+	vNoteLen.push_back (14);
+	vNoteLen.push_back (15);
+	vNoteLen.push_back (16);
+	vNoteLen.push_back (17);
+	vNoteLen.push_back (18);
+	vNoteLen.push_back (19);
+	vNoteLen.push_back (20);
+	vNoteLen.push_back (21);
+	vNoteLen.push_back (22);
+	vNoteLen.push_back (23);
+	vNoteLen.push_back (24);
+	//vNoteLen.push_back (25);
+	//vNoteLen.push_back (26);
+	//vNoteLen.push_back (27);
+	//vNoteLen.push_back (28);
+	//vNoteLen.push_back (29);
+	//vNoteLen.push_back (30);
+	//
+	vNoteLen.push_back (7);
+	vNoteLen.push_back (8);
+	vNoteLen.push_back (9);
+	vNoteLen.push_back (10);
+	vNoteLen.push_back (11);
+	vNoteLen.push_back (12);
+	vNoteLen.push_back (13);
+	vNoteLen.push_back (14);
+	vNoteLen.push_back (15);
+	vNoteLen.push_back (16);
+	vNoteLen.push_back (17);
+	vNoteLen.push_back (18);
+	vNoteLen.push_back (19);
+	vNoteLen.push_back (20);
+	vNoteLen.push_back (21);
+	vNoteLen.push_back (22);
+	vNoteLen.push_back (23);
+	vNoteLen.push_back (24);
+	//
+	vNoteLen.push_back (8);
+	vNoteLen.push_back (9);
+	vNoteLen.push_back (10);
+	vNoteLen.push_back (11);
+	vNoteLen.push_back (12);
+	vNoteLen.push_back (13);
+	vNoteLen.push_back (14);
+	vNoteLen.push_back (15);
+	vNoteLen.push_back (16);
+	vNoteLen.push_back (17);
+	vNoteLen.push_back (18);
+	vNoteLen.push_back (19);
+	vNoteLen.push_back (20);
+	vNoteLen.push_back (21);
+	vNoteLen.push_back (22);
+	vNoteLen.push_back (23);
+	vNoteLen.push_back (24);
+	//
+	vNoteLen.push_back (8);
+	vNoteLen.push_back (9);
+	vNoteLen.push_back (10);
+	vNoteLen.push_back (11);
+	vNoteLen.push_back (12);
+	vNoteLen.push_back (13);
+	vNoteLen.push_back (14);
+	vNoteLen.push_back (15);
+	vNoteLen.push_back (16);
+	vNoteLen.push_back (17);
+	vNoteLen.push_back (18);
+	vNoteLen.push_back (19);
+	vNoteLen.push_back (20);
+	vNoteLen.push_back (21);
+	vNoteLen.push_back (22);
+	vNoteLen.push_back (23);
+	vNoteLen.push_back (24);
+	//
+	vNoteLen.push_back (8);
+	vNoteLen.push_back (9);
+	vNoteLen.push_back (10);
+	vNoteLen.push_back (11);
+	vNoteLen.push_back (12);
+	vNoteLen.push_back (13);
+	vNoteLen.push_back (14);
+	vNoteLen.push_back (15);
+	vNoteLen.push_back (16);
+	vNoteLen.push_back (17);
+	vNoteLen.push_back (18);
+	vNoteLen.push_back (19);
+	vNoteLen.push_back (20);
+	//
+
+	std::uniform_int_distribution<uint32_t> randNoteLen (0, vNoteLen.size() - 1);
+
+	// Init index of sFourBar string.
+	uint32_t i = 0;
+
+	uint32_t nCharsLeft = sFourBars.size();
+
+	uint32_t nNoteCount = 0;
+
+	// Loop over the sFourBar string
+	while (i < sFourBars.size())
+	{
+		// Get random note length.
+		uint32_t nLen = vNoteLen[randNoteLen (_eng)];
+
+		if (nLen > nCharsLeft)
+			nLen = nCharsLeft;
+
+		// Update the output string.
+		for (uint32_t n = 0; n < nLen; n++)
+			sFourBars[i++] = n == 0 ? '+' : '#';
+
+		nNoteCount++;
+
+		// Ensure we are note-aligned.
+		//
+		std::vector<uint8_t> vNoteAlign;
+		vNoteAlign.push_back (4);	// 1/8ths
+		vNoteAlign.push_back (8);	// 1/4 notes
+		vNoteAlign.push_back (8);	// 1/4 notes
+		std::uniform_int_distribution<uint32_t> randNoteAlign (0, vNoteAlign.size() - 1);
+		uint32_t noteAlign = vNoteAlign[randNoteAlign (_eng)];	// 1/8th notes.
+		uint32_t j = i % noteAlign;
+
+		if (j != 0)
+			i = i - j + noteAlign;	// Advance to next note alignment.
+
+		nCharsLeft = 128 - i;
+	}
+
+
+	//--------------------------------------------------------------------------
+	// Output copy of the input file with the generated rhythm.
+	std::ofstream ofs (filename, std::ios::out);
+	uint32_t nLine = 1;
+	uint32_t nLine2 = 0;
+	uint32_t iNewChordList = 0;
+	bool bIgnoreNextLine = false;
+
+	// Init randomizer for choosing chords.
+	std::uniform_int_distribution<uint32_t> randChord (0, vChords.size() - 1);
+
+	// Init randomizer for chord variations.
+	std::uniform_int_distribution<uint32_t> randMajorChordVariation (0, vMajorChordVariations.size() - 1);
+	std::uniform_int_distribution<uint32_t> randMinorChordVariation (0, vMinorChordVariations.size() - 1);
+	std::uniform_int_distribution<uint32_t> randDimChordVariation (0, vDimChordVariations.size() - 1);
+
+	for (auto s : _vInput)
+	{
+		if (bIgnoreNextLine)
+		{
+			bIgnoreNextLine = false;
+			nLine++;
+			continue;
+		}
+
+		if (nLine2 < _vNotePosLineInFile.size() && nLine == _vNotePosLineInFile[nLine2])
+		{
+			// Original line commented out
+			ofs << "#" << _vNotePositions[nLine2] << std::endl;
+
+			// Output the rhythm version of note positions.
+			ofs << sFourBars << std::endl;
+
+			// Original chords commented out.
+			ofs << '#' << _vChordNames[nLine2] << std::endl;
+
+			//ofs << "Gm(" << nNoteCount << ")" << std::endl;
+			std::string sComma = "";
+			for (uint32_t k = 0; k < nNoteCount; k++)
+			{
+				uint32_t nChord = randChord (_eng);
+				Chord chord = vChords[nChord];
+
+				auto GetRandChordVar = [&](std::vector<std::string>& vChordVariations, 
+					std::uniform_int_distribution<uint32_t> rand)
+				{
+					std::string sChordVar;
+					do
+					{
+						sChordVar = vChordVariations[rand (_eng)];
+					} while (k < nNoteCount - 1 && sChordVar.find ("sus") != std::string::npos);
+					return sChordVar;
+				};
+
+				// Now apply a possible random chord type variation.
+				std::string sChordVar = "";
+				if (chord.iChordType == 0)
+				{
+					sChordVar = GetRandChordVar (vMajorChordVariations, randMajorChordVariation);
+				}
+				else if (chord.iChordType == 1)
+				{
+					sChordVar = GetRandChordVar (vMinorChordVariations, randMinorChordVariation);
+				}
+				else if (chord.iChordType == 2)
+				{
+					sChordVar = GetRandChordVar (vDimChordVariations, randDimChordVariation);
+				}
+
+				ofs << sComma << chord.sNote << sChordVar;
+				sComma = ", ";
+			}
+			ofs << std::endl;
+
 			bIgnoreNextLine = true;
 		}
 		else
@@ -2333,6 +2802,7 @@ std::string CMIDIHandler::_version = "0.31";
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
 std::map<std::string, std::vector<uint8_t>>CMIDIHandler::_mMelodyNotes;
 std::map<std::string, uint8_t>CMIDIHandler::_mChromaticScale;
+std::vector<std::string>CMIDIHandler::_vChromaticScale;
 std::vector<std::string>CMIDIHandler::_vRFGChords;
 
 CMIDIHandler::ClassMemberInit CMIDIHandler::cmi;
@@ -2402,6 +2872,32 @@ CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("A#", 10));
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("Bb", 10));
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("B", 11));
+
+	// 2303090952
+	_vChromaticScale.push_back ("C");
+	_vChromaticScale.push_back ("Db");
+	_vChromaticScale.push_back ("D");
+	_vChromaticScale.push_back ("Eb");
+	_vChromaticScale.push_back ("E");
+	_vChromaticScale.push_back ("F");
+	_vChromaticScale.push_back ("Gb");
+	_vChromaticScale.push_back ("G");
+	_vChromaticScale.push_back ("Ab");
+	_vChromaticScale.push_back ("A");
+	_vChromaticScale.push_back ("Bb");
+	_vChromaticScale.push_back ("B");
+	_vChromaticScale.push_back ("C");
+	_vChromaticScale.push_back ("Db");
+	_vChromaticScale.push_back ("D");
+	_vChromaticScale.push_back ("Eb");
+	_vChromaticScale.push_back ("E");
+	_vChromaticScale.push_back ("F");
+	_vChromaticScale.push_back ("Gb");
+	_vChromaticScale.push_back ("G");
+	_vChromaticScale.push_back ("Ab");
+	_vChromaticScale.push_back ("A");
+	_vChromaticScale.push_back ("Bb");
+	_vChromaticScale.push_back ("B");
 
 	// Weighted to favour certain chords.
 	//
