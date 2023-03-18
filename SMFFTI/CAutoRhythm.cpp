@@ -65,8 +65,6 @@ CAutoRhythm::CAutoRhythm(uint32_t nShortNotePrefPercent)
 		uint32_t nLen = vLongerNotes[randLongNoteLen (_eng)];
 		_vNoteLens.push_back (nLen);
 	}
-
-	int ak = 1;
 }
 
 std::string CAutoRhythm::GetPattern (uint32_t& nNumNotes)

@@ -545,7 +545,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			{
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100))
 				{
-					_sStatusMessage = "Invalid +AutoRhythmConsecutiveNoteChancePercentage value (range 1-100).";
+					_sStatusMessage = "Invalid +AutoRhythmConsecutiveNoteChancePercentage value (range 0-100).";
 					return StatusCode::InvalidAutoRhythmConsecutiveNoteChancePercentage;
 				}
 				_sAutoRhythmConsecutiveNoteChancePercentage = std::stoi (vKeyValue[1]);
@@ -558,6 +558,87 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 					return StatusCode::InvalidAllMelodyNotesValue;
 				}
 				_bAllMelodyNotes = nVal == 1;
+			}
+			else if (vKeyValue[0] == "AutoChordsNumBars")
+			{
+				bool bInvalid = false;
+				int num = 0;
+				try
+				{
+					num = stoi (vKeyValue[1]);
+				}
+				catch (const std::invalid_argument& e)
+				{
+					e;
+					bInvalid = true;
+				}
+				if (bInvalid || (num != 4 && num != 8 && num != 16))
+				{
+					_sStatusMessage = "Invalid +AutoChordsNumBars value (valid: 4, 8 or 16).";
+					return StatusCode::InvalidAutoChordsNumBarsValue;
+				}
+				_nAutoChordsNumBars = num;
+			}
+			else if (vKeyValue[0] == "AutoChordsMinorChordBias")
+			{
+				_sAutoChordsMinorChordBias = vKeyValue[1];
+				if (!ValidBiasParam (_sAutoChordsMinorChordBias, 3))
+				{
+					_sStatusMessage = "Invalid +_sAutoChordsMinorChordBias parameter.";
+					return StatusCode::InvalidAutoChordsMinorChordBias;
+				}
+				else
+				{
+					std::vector<std::string> v = akl::Explode (_sAutoChordsMinorChordBias, ",");
+					int num = 0;
+					for (int i = 0; i < 3; i++)
+					{
+						int n = stoi (v[i]);
+						_vAutoChordsMinorChordBias.push_back (n);
+						num += n;
+					}
+					if (num > 100)
+					{
+						_sStatusMessage = "Invalid +_sAutoChordsMinorChordBias parameter.\n"
+							"The 3 values must not exceed 100%";
+						return StatusCode::InvalidAutoChordsMinorChordBias;
+					}
+				}
+			}
+			else if (vKeyValue[0] == "AutoChordsMajorChordBias")
+			{
+				_sAutoChordsMajorChordBias = vKeyValue[1];
+				if (!ValidBiasParam (_sAutoChordsMajorChordBias, 3))
+				{
+					_sStatusMessage = "Invalid +_sAutoChordsMajorChordBias parameter.";
+					return StatusCode::InvalidAutoChordsMajorChordBias;
+				}
+				else
+				{
+					std::vector<std::string> v = akl::Explode (_sAutoChordsMajorChordBias, ",");
+					int num = 0;
+					for (int i = 0; i < 3; i++) 
+					{
+						int n = stoi (v[i]);
+						_vAutoChordsMajorChordBias.push_back (n);
+						num += n;
+					}
+					if (num > 100)
+					{
+						_sStatusMessage = "Invalid +_sAutoChordsMajorChordBias parameter.\n"
+							"The 3 values must not exceed 100%";
+						return StatusCode::InvalidAutoChordsMajorChordBias;
+					}
+				}
+			}
+			else if (vKeyValue[0] == "AutoChordsShortNoteBiasPercent")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100))
+				{
+					_sStatusMessage = "Invalid +AutoChordsShortNoteBiasPercent value (range 0-100).";
+					return StatusCode::InvalidAutoChordsShortNoteBiasPercent;
+				}
+				_nAutoChordsShortNoteBiasPercent = std::stoi (vKeyValue[1]);
 			}
 			else
 			{
@@ -904,9 +985,9 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 	CChordBank chordBank (sNote);
 	if (bMinorKey)
 	{
-		uint8_t nRootPercentage = 32;
-		uint8_t nOtherMinorPercentage = 32;		// The other two minor chords.
-		uint8_t nMajorPercentage = 32;			// The three major chords.
+		uint8_t nRootPercentage = _vAutoChordsMinorChordBias[0];
+		uint8_t nOtherMinorPercentage = _vAutoChordsMinorChordBias[1];	// The other two minor chords.
+		uint8_t nMajorPercentage = _vAutoChordsMinorChordBias[2];		// The three major chords.
 		// (Remaining percentage alloted to the diminished chord.)
 		if (!chordBank.BuildMinor (nRootPercentage, nOtherMinorPercentage, nMajorPercentage))
 		{
@@ -918,9 +999,9 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 	}
 	else
 	{
-		uint8_t nRootPercentage = 32;
-		uint8_t nOtherMajorPercentage = 32;		// The other two major chords.
-		uint8_t nMinorPercentage = 32;			// The three minor chords.
+		uint8_t nRootPercentage = _vAutoChordsMajorChordBias[0];
+		uint8_t nOtherMajorPercentage = _vAutoChordsMajorChordBias[1];	// The other two major chords.
+		uint8_t nMinorPercentage = _vAutoChordsMajorChordBias[2];		// The three minor chords.
 		// (Remaining percentage alloted to the diminished chord.)
 		if (!chordBank.BuildMajor (nRootPercentage, nOtherMajorPercentage, nMinorPercentage))
 		{
@@ -930,13 +1011,6 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 			return CMIDIHandler::StatusCode::InvalidChordsBiasPercentage;
 		}
 	}
-
-	// Object that generates the random rhythm pattern, specifying a short note
-	// bias percentage (0 means no short notes; 100 means _all_ short notes).
-	// (Short notes being 16 32nds or shorter.)
-	CAutoRhythm autoRhythm (75);
-	uint32_t nNoteCount;
-	std::string sPattern = autoRhythm.GetPattern (nNoteCount);
 
 	//--------------------------------------------------------------------------
 	// Output copy of the input file with the generated rhythm.
@@ -957,29 +1031,40 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 
 		if (nLine2 < _vNotePosLineInFile.size() && nLine == _vNotePosLineInFile[nLine2])
 		{
-			// Original line commented out
-			ofs << "#" << _vNotePositions[nLine2] << std::endl;
-
-			// Output the rhythm version of note positions.
-			ofs << sPattern << std::endl;
-
-			// Original chords commented out.
-			ofs << '#' << _vChordNames[nLine2] << std::endl;
-
-			std::string sComma = "";
-			for (uint32_t k = 0; k < nNoteCount; k++)
+			for (int iFred = 0; iFred < (_nAutoChordsNumBars / 4); iFred++)
 			{
-				// This sets the chosen random chord in the CChordBank object;
-				// you then have to interrogate it to retrieve the actual chord value.
-				chordBank.SetRandomChord();
+				if (iFred > 0)
+					ofs << "\n" << sRuler << sRuler << sRuler << sRuler << "\n";
 
-				// Now apply a possible random chord type variation.
-				std::string sChordVar = chordBank.GetChordVariation();
+				// Object that generates the random rhythm pattern, specifying a short note
+				// bias percentage (0 means no short notes; 100 means _all_ short notes).
+				// (Short notes being 16 32nds or shorter.)
+				CAutoRhythm autoRhythm (_nAutoChordsShortNoteBiasPercent);
+				uint32_t nNoteCount;
+				std::string sPattern = autoRhythm.GetPattern (nNoteCount);
 
-				ofs << sComma << chordBank.GetChordName() << sChordVar;
-				sComma = ", ";
+				// Output the rhythm version of note positions.
+				ofs << sPattern << std::endl;
+
+				std::string sComma = "";
+				for (uint32_t k = 0; k < nNoteCount; k++)
+				{
+					// This sets the chosen random chord in the CChordBank object;
+					// you then have to interrogate it to retrieve the actual chord value.
+					chordBank.SetRandomChord();
+
+					// Now apply a possible random chord type variation.
+					std::string sChordVar = chordBank.GetChordVariation();
+
+					ofs << sComma << chordBank.GetChordName() << sChordVar;
+					sComma = ", ";
+				}
+				ofs << std::endl;
+
 			}
-			ofs << std::endl;
+
+
+
 
 			bIgnoreNextLine = true;
 		}
@@ -2429,7 +2514,7 @@ bool CMIDIHandler::ValidBiasParam (std::string& str, uint8_t numValues)
 		// necessary. Can't easily think of a way around this for now.
 		// If you really do not want to have any 32nd notes/gaps, specify big numbers
 		// (eg. 1000) for the other values - this should virtually exclude 32nds.
-		if (i == v.size() - 1 && nVal == 0)
+		if (i == 5 && nVal == 0)
 			v[i] = "1";
 
 		// Reconstruct param string for sake of dreadful hack mentioned above.

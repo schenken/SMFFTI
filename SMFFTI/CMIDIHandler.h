@@ -75,7 +75,11 @@ public:
 		InvalidAutoRhythmGapLenBias,
 		InvalidAutoRhythmConsecutiveNoteChancePercentage,
 		InvalidAllMelodyNotesValue,
-		InvalidChordsBiasPercentage
+		InvalidChordsBiasPercentage,
+		InvalidAutoChordsNumBarsValue,
+		InvalidAutoChordsMinorChordBias,
+		InvalidAutoChordsMajorChordBias,
+		InvalidAutoChordsShortNoteBiasPercent
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -233,6 +237,8 @@ private:
 	// and manually edit to create a melody.
 	bool _bAllMelodyNotes = false;
 
+	uint8_t _nAutoChordsNumBars = 4;
+
 	std::string _sTrackName = "Made by SMFFTI";
 
 	std::string _sStatusMessage = "";
@@ -258,6 +264,24 @@ private:
 	uint32_t _sAutoRhythmConsecutiveNoteChancePercentage = 25;
 
 	const std::string sRuler = "[......|.......|.......|.......]";
+
+	// Auto-chords: For *minor* keys, percentage bias for
+	// (i) root chord (2) other minor chords (3) major chords,
+	// respectively. If value less than 100, the remainder is
+	// alloted to diminished chords.
+	std::string _sAutoChordsMinorChordBias = "32, 32, 32";
+	std::vector<uint8_t> _vAutoChordsMinorChordBias;
+
+	// Auto-chords: For *major* keys, percentage bias for
+	// (i) root chord (2) other major chords (3) minor chords,
+	// respectively. If value less than 100, the remainder is
+	// alloted to diminished chords.
+	std::string _sAutoChordsMajorChordBias = "32, 32, 32";
+	std::vector<uint8_t> _vAutoChordsMajorChordBias;
+
+	// Auto-chords: Percentage to bias shorter notes.
+	// Zero means *no* short notes; 100 means *all* short notes.
+	uint8_t _nAutoChordsShortNoteBiasPercent = 50;
 
 	//---------------------------------------------------------------------
 	// Static class members
