@@ -74,7 +74,8 @@ public:
 		InvalidAutoRhythmNoteLenBias,
 		InvalidAutoRhythmGapLenBias,
 		InvalidAutoRhythmConsecutiveNoteChancePercentage,
-		InvalidAllMelodyNotesValue
+		InvalidAllMelodyNotesValue,
+		InvalidChordsBiasPercentage
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -271,9 +272,6 @@ private:
 	static std::map<std::string, std::vector<uint8_t>> _mMelodyNotes;
 
 	static std::map<std::string, uint8_t>_mChromaticScale;
-
-	// 2303090952
-	static std::vector<std::string> _vChromaticScale;
 
 	static std::vector<std::string> _vRFGChords;
 

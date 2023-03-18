@@ -147,6 +147,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="CAutoRhythm.h" />
+    <ClInclude Include="CChordBank.h" />
     <ClInclude Include="CMIDIHandler.h" />
     <ClInclude Include="Common.h" />
     <ClInclude Include="framework.h" />
@@ -156,6 +158,8 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CAutoRhythm.cpp" />
+    <ClCompile Include="CChordBank.cpp" />
     <ClCompile Include="CMIDIHandler.cpp" />
     <ClCompile Include="Common.cpp" />
     <ClCompile Include="pch.cpp">
