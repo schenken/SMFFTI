@@ -31,6 +31,29 @@ enum class MetaEventName : uint8_t
 	MetaSequencerSpecific = 0x7F
 };
 
+enum class ChordTypeVariation : uint32_t
+{
+	Major,
+	Dominant_7th,
+	Major_7th,
+	Dominant_9th,
+	Major_9th,
+	Add_9,
+	Sus_2,
+	_7_Sus_2,
+	Sus_4,
+	_7_Sus_4,
+	Minor,
+	Minor_7th,
+	Minor_9th,
+	Minor_Add_9,
+	Dim,
+	Dim_7th,
+	HalfDim,
+	_COUNT_
+};
+
+
 class CMIDIHandler
 {
 public:
@@ -79,7 +102,24 @@ public:
 		InvalidAutoChordsNumBarsValue,
 		InvalidAutoChordsMinorChordBias,
 		InvalidAutoChordsMajorChordBias,
-		InvalidAutoChordsShortNoteBiasPercent
+		InvalidAutoChordsShortNoteBiasPercent,
+		InvalidAutoChordsCTV_maj_Value,
+		InvalidAutoChordsCTV_7_Value,
+		InvalidAutoChordsCTV_maj7_Value,
+		InvalidAutoChordsCTV_9_Value,
+		InvalidAutoChordsCTV_maj9_Value,
+		InvalidAutoChordsCTV_add9_Value,
+		InvalidAutoChordsCTV_sus2_Value,
+		InvalidAutoChordsCTV_7sus2_Value,
+		InvalidAutoChordsCTV_sus4_Value,
+		InvalidAutoChordsCTV_7sus4_Value,
+		InvalidAutoChordsCTV_min_Value,
+		InvalidAutoChordsCTV_m7_Value,
+		InvalidAutoChordsCTV_m9_Value,
+		InvalidAutoChordsCTV_madd9_Value,
+		InvalidAutoChordsCTV_dim_Value,
+		InvalidAutoChordsCTV_dim7_Value,
+		InvalidAutoChordsCTV_m7b5_Value
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -282,6 +322,10 @@ private:
 	// Auto-chords: Percentage to bias shorter notes.
 	// Zero means *no* short notes; 100 means *all* short notes.
 	uint8_t _nAutoChordsShortNoteBiasPercent = 50;
+
+	// Auto-chords: Factors for specifying the chances of the
+	// various Chord Type Variations (CTV) occurring.
+	std::vector<uint32_t> _vChordTypeVariationFactors;
 
 	//---------------------------------------------------------------------
 	// Static class members

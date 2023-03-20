@@ -1,8 +1,9 @@
 #include "pch.h"
 #include "CChordBank.h"
+#include "CMIDIHandler.h"
 
 // Constructor that builds everything.
-CChordBank::CChordBank(std::string sNote)
+CChordBank::CChordBank (const std::string& sNote, const std::vector<uint32_t>& ctv)
 : _sKey (sNote)
 {
 	_eng.seed (_rdev());
@@ -10,15 +11,9 @@ CChordBank::CChordBank(std::string sNote)
 	auto it = std::find (_vChromaticScale.begin(), _vChromaticScale.end(), _sKey);
 	_iChord = std::distance (_vChromaticScale.begin(), it);
 
-	BuildMajorChordVariations();
-	BuildMinorChordVariations();
-	BuildDimChordVariations();
-
-	_vChordVarChance.assign (100, false);
-	for (uint8_t i = 0; i < _iChordVarAmount; i++)
-		_vChordVarChance[i] = true;
-
-	int ak = 1;
+	BuildMajorChordVariations (ctv);
+	BuildMinorChordVariations (ctv);
+	BuildDimChordVariations (ctv);
 }
 
 int CChordBank::BuildMinor (uint8_t nRootPercent, uint8_t nOtherMinorPercent, uint8_t nMajorPercent)
@@ -147,7 +142,7 @@ void CChordBank::SetRandomChord()
 	_chord = chord.sNote;
 	_chordType = chord.iChordType;
 
-	std::vector<std::string>* pv;
+	std::vector<std::string>* pv = &_vMajorChordVariations;
 
 	// Init randomizer for chord variations.
 	switch (_chordType)
@@ -162,154 +157,110 @@ void CChordBank::SetRandomChord()
 		pv = &_vDimChordVariations;
 		break;
 	default:
-		pv = &_vMajorChordVariations;
+		// Won't reach this
+		ASSERT (1==0);
 		break;
 	}
 
-	// See if we should get a chord variation:
-	// iChordVarChance represents the chance percentage of using a chord variation.
-	std::uniform_int_distribution<uint32_t> rand (0, 99);
-	uint32_t iChordVarChance = rand (_eng);
-	if (!_vChordVarChance[iChordVarChance])
-	{
-		// No, so use basic chord.
-		// NB. For dim chords, even if no variation specified, we will still
-		// always use a dim7, since it sounds better.
-		_chordVariation = (*pv)[0];
-		return;
-	}
-
-	std::uniform_int_distribution<uint32_t> randChordVariation (0, pv->size() - 1);
+ 	std::uniform_int_distribution<uint32_t> randChordVariation (0, pv->size() - 1);
 	uint32_t iChordVar = randChordVariation (_eng);
 	_chordVariation = (*pv)[iChordVar];
 }
 
-int32_t CChordBank::BuildMajorChordVariations()
+int32_t CChordBank::BuildMajorChordVariations (const std::vector<uint32_t>& ctv)
 {
 	int result = 0;
+	uint32_t n;
 
 	std::vector<std::string>& v = _vMajorChordVariations;
 
-	v.push_back ("");
-	v.push_back ("");
-	v.push_back ("");
-	v.push_back ("");
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Major)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("");
 
-	v.push_back ("7");
-	v.push_back ("7");
-	v.push_back ("maj7");
-	v.push_back ("maj7");
-	v.push_back ("maj7");
-	v.push_back ("maj7");
-	v.push_back ("9");
-	v.push_back ("9");
-	v.push_back ("maj9");
-	v.push_back ("maj9");
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Dominant_7th)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("7");
 
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
-	v.push_back ("add9");
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Major_7th)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("maj7");
 
-	// Sus chords are quite nice
-	v.push_back ("sus2");
-	v.push_back ("7sus2");
-	v.push_back ("sus4");
-	v.push_back ("7sus4");
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Dominant_9th)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("9");
 
-	// Modal interchange - oooh! eg. C becomes Cm.
-	v.push_back ("m");
-	v.push_back ("m");
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Major_9th)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("maj9");
+
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Add_9)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("add9");
+
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Sus_2)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("sus2");
+
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::_7_Sus_2)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("7sus2");
+
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Sus_4)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("sus4");
+
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::_7_Sus_4)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("7sus4");
 
 	return result;
 }
 
-int32_t CChordBank::BuildMinorChordVariations()
+int32_t CChordBank::BuildMinorChordVariations (const std::vector<uint32_t>& ctv)
 {
 	int result = 0;
+	uint32_t n;
 
 	std::vector<std::string>& v = _vMinorChordVariations;
 
-	v.push_back ("m");
-	v.push_back ("m");
-	v.push_back ("m");
-	v.push_back ("m");
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Minor)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("m");
 
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
-	v.push_back ("m7");
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Minor_7th)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("m7");
 
-	v.push_back ("9");
-	v.push_back ("m9");
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Minor_9th)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("m9");
 
-	v.push_back ("madd9");
-	v.push_back ("madd9");
-
-	// Sus chords are quite nice
-	v.push_back ("sus2");
-	v.push_back ("7sus2");
-	v.push_back ("sus4");
-	v.push_back ("7sus4");
-
-	// Modal interchange - oooh! eg. Cm becomes C.
-	v.push_back ("");
-	v.push_back ("");
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Minor_Add_9)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("madd9");
 
 	return result;
 }
 
-int32_t CChordBank::BuildDimChordVariations()
+int32_t CChordBank::BuildDimChordVariations (const std::vector<uint32_t>& ctv)
 {
 	int result = 0;
+	uint32_t n;
 
 	std::vector<std::string>& v = _vDimChordVariations;
 
-	v.push_back ("dim7");
-	v.push_back ("m7b5");
-	// NB. We never play a straight dim - always a dim7 or m7b5.
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Dim)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("dim");
+
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Dim_7th)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("dim7");
+
+	n = ctv[static_cast<uint32_t> (ChordTypeVariation::HalfDim)];
+	for (uint32_t i = 0; i < n; i++)
+		v.push_back ("m7b5");
 
 	return result;
 }

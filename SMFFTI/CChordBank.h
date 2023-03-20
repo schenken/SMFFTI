@@ -15,7 +15,7 @@ class CChordBank
 {
 public:
 
-	CChordBank (std::string sNote);
+	CChordBank (const std::string& sNote, const std::vector<uint32_t>& ctv);
 
 	// Construct list (vector) of major, minor and diminished chords for the key.
 	// These lists constitute the pool of chords from which progressions are randomly
@@ -60,12 +60,9 @@ protected:
 	ChordType _chordType;
 	std::string _chordVariation;
 
-	uint32_t _iChordVarAmount = 20;	// Percentage, so range 0 - 100.
-	std::vector<bool> _vChordVarChance;
-
-	int32_t BuildMajorChordVariations();
-	int32_t BuildMinorChordVariations();
-	int32_t BuildDimChordVariations();
+	int32_t BuildMajorChordVariations (const std::vector<uint32_t>& ctv);
+	int32_t BuildMinorChordVariations (const std::vector<uint32_t>& ctv);
+	int32_t BuildDimChordVariations (const std::vector<uint32_t>& ctv);
 
 	//------------------------------------------------------------------------------------------
 	// Static class members

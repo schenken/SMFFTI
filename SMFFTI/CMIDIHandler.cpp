@@ -12,6 +12,30 @@ CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 
 	_nArpNoteTicks = _ticksPerBar / _nArpTime;
 
+	for (int i = 0; i < static_cast<int>(ChordTypeVariation::_COUNT_); i++)
+		_vChordTypeVariationFactors.push_back (0);
+
+	// Default values, when chord type variations not specified in the command file.
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major)]		= 10000;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dominant_7th)] = 2000;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_7th)]	= 500;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dominant_9th)] = 500;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_9th)]	= 500;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Add_9)]		= 2000;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_2)]		= 100;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_2)]		= 100;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_4)]		= 100;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_4)]		= 100;
+	//
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor)]		= 10000;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_7th)]	= 2000;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_9th)]	= 500;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_Add_9)]	= 2000;
+	//
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dim)]			= 0;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dim_7th)]		= 1;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::HalfDim)]		= 1;
+
 	_eng.seed (_rdev());
 }
 
@@ -638,7 +662,177 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 					_sStatusMessage = "Invalid +AutoChordsShortNoteBiasPercent value (range 0-100).";
 					return StatusCode::InvalidAutoChordsShortNoteBiasPercent;
 				}
-				_nAutoChordsShortNoteBiasPercent = std::stoi (vKeyValue[1]);
+				_nAutoChordsShortNoteBiasPercent = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_maj")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_maj value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_maj_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Major);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_7")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_7 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_7_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Dominant_7th);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_maj7")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_maj7 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_maj7_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Major_7th);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_9")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_9 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_9_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Dominant_9th);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_maj9")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_maj9 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_maj9_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Major_9th);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_add9")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_add9 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_add9_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Add_9);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_sus2")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_sus2 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_sus2_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Sus_2);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_7sus2")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_7sus2 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_7sus2_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::_7_Sus_2);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_sus4")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_sus4 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_sus4_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Sus_4);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_7sus4")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_7sus4 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_7sus4_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::_7_Sus_4);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_min")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_min value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_min_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Minor);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_m7")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_m7 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_m7_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Minor_7th);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_m9")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_m9 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_m9_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Minor_9th);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_madd9")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_madd9 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_madd9_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Minor_Add_9);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_dim7")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_dim7 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_dim7_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Dim_7th);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_dim")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_dim value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_dim_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Dim);
+				_vChordTypeVariationFactors[i] = nVal;
+			}
+			else if (vKeyValue[0] == "AutoChords_CTV_m7b5")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
+				{
+					_sStatusMessage = "Invalid +AutoChords_CTV_m7b5 value (range 0-100000).";
+					return StatusCode::InvalidAutoChordsCTV_m7b5_Value;
+				}
+				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::HalfDim);
+				_vChordTypeVariationFactors[i] = nVal;
 			}
 			else
 			{
@@ -982,7 +1176,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 
 	// Create CChordBank object that will hold the chord lists.
 	// Tell CChordBank object to construct either minor or major chord list.
-	CChordBank chordBank (sNote);
+	CChordBank chordBank (sNote, _vChordTypeVariationFactors);
 	if (bMinorKey)
 	{
 		uint8_t nRootPercentage = _vAutoChordsMinorChordBias[0];
