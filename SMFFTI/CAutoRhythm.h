@@ -9,7 +9,7 @@ class CAutoRhythm
 public:
 	CAutoRhythm (uint32_t nShortNotePrefPercent);
 
-	std::string GetPattern (uint32_t& nNumNotes);
+	std::string GetPattern (uint32_t& nNumNotes, uint32_t nPatternLen);
 
 protected:
 	std::vector<uint8_t> _vNoteLens;

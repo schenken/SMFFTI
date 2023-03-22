@@ -185,6 +185,7 @@ private:
 
 	std::vector<std::string> _vNotePositions;
 	std::vector<uint32_t> _vNotePosLineInFile;
+	std::vector<uint32_t> _vRulerLineInFile;
 	std::vector<std::string> _vChordNames;
 	std::vector<std::string> _vMelodyNotes;
 	std::vector<uint32_t> _vBarCount;

@@ -67,9 +67,9 @@ CAutoRhythm::CAutoRhythm(uint32_t nShortNotePrefPercent)
 	}
 }
 
-std::string CAutoRhythm::GetPattern (uint32_t& nNumNotes)
+std::string CAutoRhythm::GetPattern (uint32_t& nNumNotes, uint32_t nPatternLen)
 {
-	std::string sPattern (128, ' ');
+	std::string sPattern (nPatternLen, ' ');
 
 	std::uniform_int_distribution<uint32_t> randNoteLen (0, _vNoteLens.size() - 1);
 
@@ -115,7 +115,7 @@ std::string CAutoRhythm::GetPattern (uint32_t& nNumNotes)
 		if (j != 0)
 			i = i - j + noteAlign;	// Advance to next note alignment.
 
-		nCharsLeft = 128 - i;
+		nCharsLeft = nPatternLen - i;
 	}
 
 	nNumNotes = nNoteCount;

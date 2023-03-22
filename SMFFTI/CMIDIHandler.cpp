@@ -16,21 +16,21 @@ CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 		_vChordTypeVariationFactors.push_back (0);
 
 	// Default values, when chord type variations not specified in the command file.
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major)]		= 10000;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dominant_7th)] = 2000;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_7th)]	= 500;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dominant_9th)] = 500;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_9th)]	= 500;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Add_9)]		= 2000;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_2)]		= 100;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_2)]		= 100;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_4)]		= 100;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_4)]		= 100;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major)]		= 1000;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dominant_7th)] = 100;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_7th)]	= 150;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dominant_9th)] = 50;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_9th)]	= 50;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Add_9)]		= 200;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_2)]		= 10;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_2)]		= 10;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_4)]		= 10;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_4)]		= 10;
 	//
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor)]		= 10000;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_7th)]	= 2000;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_9th)]	= 500;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_Add_9)]	= 2000;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor)]		= 1000;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_7th)]	= 200;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_9th)]	= 50;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_Add_9)]	= 200;
 	//
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dim)]			= 0;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dim_7th)]		= 1;
@@ -596,9 +596,9 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 					e;
 					bInvalid = true;
 				}
-				if (bInvalid || (num != 4 && num != 8 && num != 16))
+				if (bInvalid || (num != 2 && num != 4 && num != 8 && num != 16))
 				{
-					_sStatusMessage = "Invalid +AutoChordsNumBars value (valid: 4, 8 or 16).";
+					_sStatusMessage = "Invalid +AutoChordsNumBars value (valid: 2, 4, 8 or 16).";
 					return StatusCode::InvalidAutoChordsNumBarsValue;
 				}
 				_nAutoChordsNumBars = num;
@@ -881,6 +881,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			}
 
 			_vBarCount.push_back (nNumBars);
+			_vRulerLineInFile.push_back (nLineNum);
 
 			nDataLines++;
 			continue;
@@ -1212,30 +1213,36 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 	uint32_t nLine = 1;
 	uint32_t nLine2 = 0;
 	uint32_t iNewChordList = 0;
-	bool bIgnoreNextLine = false;
+	uint32_t nIgnoreLines = 0;
+
+	uint8_t nNumBarsPerLine = _nAutoChordsNumBars == 2 ? 2 : 4;
 
 	for (auto s : _vInput)
 	{
-		if (bIgnoreNextLine)
+		if (nIgnoreLines > 0)
 		{
-			bIgnoreNextLine = false;
+			nIgnoreLines--;
 			nLine++;
 			continue;
 		}
 
-		if (nLine2 < _vNotePosLineInFile.size() && nLine == _vNotePosLineInFile[nLine2])
+		if (nLine2 < _vRulerLineInFile.size() && nLine == _vRulerLineInFile[nLine2])
 		{
-			for (int iFred = 0; iFred < (_nAutoChordsNumBars / 4); iFred++)
+			for (int iFred = 0; iFred < (_nAutoChordsNumBars / nNumBarsPerLine); iFred++)
 			{
 				if (iFred > 0)
-					ofs << "\n" << sRuler << sRuler << sRuler << sRuler << "\n";
+					ofs << "\n";
+
+				for (int i = 0; i < nNumBarsPerLine; i++)
+					ofs << sRuler;
+				ofs << "\n";
 
 				// Object that generates the random rhythm pattern, specifying a short note
 				// bias percentage (0 means no short notes; 100 means _all_ short notes).
 				// (Short notes being 16 32nds or shorter.)
 				CAutoRhythm autoRhythm (_nAutoChordsShortNoteBiasPercent);
 				uint32_t nNoteCount;
-				std::string sPattern = autoRhythm.GetPattern (nNoteCount);
+				std::string sPattern = autoRhythm.GetPattern (nNoteCount, nNumBarsPerLine * 32);
 
 				// Output the rhythm version of note positions.
 				ofs << sPattern << std::endl;
@@ -1257,10 +1264,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 
 			}
 
-
-
-
-			bIgnoreNextLine = true;
+			nIgnoreLines = 2;
 		}
 		else
 			ofs << s << std::endl;
