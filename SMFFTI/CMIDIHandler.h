@@ -119,7 +119,8 @@ public:
 		InvalidAutoChordsCTV_madd9_Value,
 		InvalidAutoChordsCTV_dim_Value,
 		InvalidAutoChordsCTV_dim7_Value,
-		InvalidAutoChordsCTV_m7b5_Value
+		InvalidAutoChordsCTV_m7b5_Value,
+		InvalidWriteOldRuler
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -304,7 +305,16 @@ private:
 	// 100 means no gaps (except even-numbered 32nds, when no note is possible).
 	uint32_t _sAutoRhythmConsecutiveNoteChancePercentage = 25;
 
-	const std::string sRuler = "[......|.......|.......|.......]";
+	// Improved ruler, displaying characters only at 1/16th notes.
+	// 1/4 notes now aligned with dollar sign and vertical bars.
+	// 1/8th notes are: dollar sign, middle dot in each 1/4 note,
+	// and vertical bars. This is now the default ruler type: If you
+	// wish to use the old ruler type, set parameter +UseOldRuler = 1.
+	std::string sRulerNew = "$ . . . | . . . | . . . | . . . ";
+
+	std::string sRulerOld = "[......|.......|.......|.......]";
+
+	std::string sRuler = sRulerNew;
 
 	// Auto-chords: For *minor* keys, percentage bias for
 	// (i) root chord (2) other minor chords (3) major chords,
@@ -322,11 +332,15 @@ private:
 
 	// Auto-chords: Percentage to bias shorter notes.
 	// Zero means *no* short notes; 100 means *all* short notes.
-	uint8_t _nAutoChordsShortNoteBiasPercent = 50;
+	uint8_t _nAutoChordsShortNoteBiasPercent = 66;
 
 	// Auto-chords: Factors for specifying the chances of the
 	// various Chord Type Variations (CTV) occurring.
 	std::vector<uint32_t> _vChordTypeVariationFactors;
+
+	// Use this to make SMFFTI output the old-style ruler when it
+	// creates a modfied command file (eg. Auto-chords).
+	bool _bWriteOldRuler = 0;
 
 	//---------------------------------------------------------------------
 	// Static class members

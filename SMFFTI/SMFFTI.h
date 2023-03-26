@@ -6,6 +6,10 @@ SMFFTI - Simple MIDI Files From Text Input
 
 See the User Guide for everything you need to know about using it.
 
+v0.4	March 24, 2023
+Auto-chords. Main routine for this is CMIDIHandler::CopyFileWithAutoChords.
+New classes CChordBank and CAutoRhythm.
+
 v0.31	October 24, 2022
 Added command file parameter +AllMelodyNotes
 

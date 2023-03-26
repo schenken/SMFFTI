@@ -22,15 +22,15 @@ CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dominant_9th)] = 50;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_9th)]	= 50;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Add_9)]		= 200;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_2)]		= 10;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_2)]		= 10;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_2)]		= 15;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_2)]		= 15;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_4)]		= 10;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_4)]		= 10;
 	//
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor)]		= 1000;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_7th)]	= 200;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_7th)]	= 250;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_9th)]	= 50;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_Add_9)]	= 200;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_Add_9)]	= 150;
 	//
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dim)]			= 0;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dim_7th)]		= 1;
@@ -834,6 +834,17 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::HalfDim);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
+			else if (vKeyValue[0] == "WriteOldRuler")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
+				{
+					_sStatusMessage = "Invalid +WriteOldRuler value (valid: 0 or 1).";
+					return StatusCode::InvalidWriteOldRuler;
+				}
+				_bWriteOldRuler = nVal == 1;
+				if (_bWriteOldRuler)
+					sRuler = sRulerOld;
+			}
 			else
 			{
 				std::string p = sLine.substr (1, sTemp.size() - 1);
@@ -844,13 +855,22 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			continue;
 		}
 
-		if (sTemp.substr (0, 32) == sRuler)
+		if (sLine.substr (0, 32) == sRulerOld || sLine.substr (0, 31) == sRulerNew.substr (0, 31))
 		{
-			// Ruler line. The next two lines should contain
+			// Ruler line. You are able to use either of the two ruler types.
+			// The next two lines should contain
 			// (1) Note Positions: series of hash groups
 			// (2) Comma-separated Chord Names, one for each of the Note Position hash groups.
 
-			nRulerLen = sTemp.length();
+			nRulerLen = sLine.length();
+
+			// When the alt ruler - the one showing 1/16ths - is used, the user might not
+			// have put a space at the end, so we add one here.
+			if (nRulerLen % 32 == 31)
+			{
+				sLine += " ";
+				nRulerLen = sLine.length();
+			}
 
 			if (nRulerLen % 32 != 0)
 			{
@@ -860,10 +880,10 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				return StatusCode::InvalidRulerLine;
 			}
 
-			uint32_t nNumBars = sTemp.length() / 32;
+			uint32_t nNumBars = sLine.length() / 32;
 			for (uint32_t i = 1; i < nNumBars; i++)
 			{
-				if (sTemp.substr (i * 32, 32) != sRuler)
+				if (sLine.substr (i * 32, 32) != sRulerOld && sLine.substr (i * 32, 32) != sRulerNew)
 				{
 					std::ostringstream ss;
 					ss << "Line " << nLineNum << ": Invalid ruler line.";
@@ -2734,7 +2754,7 @@ std::string CMIDIHandler::GetStatusMessage()
 //-----------------------------------------------------------------------------
 // Static class members
 
-std::string CMIDIHandler::_version = "0.31";
+std::string CMIDIHandler::_version = "0.4";
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
 std::map<std::string, std::vector<uint8_t>>CMIDIHandler::_mMelodyNotes;

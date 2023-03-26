@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "CAutoRhythm.h"
 
-CAutoRhythm::CAutoRhythm(uint32_t nShortNotePrefPercent)
+CAutoRhythm::CAutoRhythm (uint32_t nShortNotePrefPercent)
 {
 	_eng.seed (_rdev());
 
