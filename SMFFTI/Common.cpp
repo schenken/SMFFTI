@@ -17,6 +17,26 @@ size_t LoadTextFileIntoVector(const std::string& filename, std::vector<std::stri
     return v.size();
 }
 
+int WriteVectorToTextFile (const std::string filename, const std::vector<std::string> v)
+{
+    int result = 0;
+   
+    std::ofstream f;
+    f.open (filename.c_str());
+   
+    if (f)
+    {
+        for (std::vector<std::string>::const_iterator it = v.begin(); it <v.end(); it++)
+        {
+            f << *it << "\n";
+        }
+        f.close();
+        result = 1;
+    }
+   
+    return result;
+}
+
 std::string RemoveWhitespace (const std::string& s, uint8_t mode)
 {
 	// Modes: Leading = 1, Trailing = 2, All = 4, Condense = 8

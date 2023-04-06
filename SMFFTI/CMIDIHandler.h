@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CChordBank.h"
+
 enum class EventName : uint8_t
 {
 	NoteOff = 0x80,
@@ -178,6 +180,8 @@ private:
 
 	bool ValidBiasParam (std::string& str, uint8_t numValues);
 
+	int InitChordBank (const std::string& sKey);
+
 	// File with MIDI content directives.
 	std::string _sInputFile;
 
@@ -341,6 +345,13 @@ private:
 	// Use this to make SMFFTI output the old-style ruler when it
 	// creates a modfied command file (eg. Auto-chords).
 	bool _bWriteOldRuler = 0;
+
+	// CChordBank object specifically for Random Chord Replacement (RCR) mode.
+	std::unique_ptr<CChordBank> _chordBank;
+
+	// For RandomChordReplacement (RCR)
+	std::vector<std::string> _vInputCopy;
+	bool _bRCR = false;
 
 	//---------------------------------------------------------------------
 	// Static class members

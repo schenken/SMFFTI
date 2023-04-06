@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "CMIDIHandler.h"
-#include "CChordBank.h"
 #include "CAutoRhythm.h"
 #include "Common.h"
 
@@ -166,9 +165,34 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 	bool bCommentBlock = false;
 	bool bRandomGroove = false;
 
+	// Initialise necessary Auto-chords defaults.
+	std::vector<std::string> v = akl::Explode (_sAutoChordsMinorChordBias, ",");
+	int num = 0;
+	for (int i = 0; i < 3; i++)
+	{
+		int n = stoi (v[i]);
+		_vAutoChordsMinorChordBias.push_back (n);
+		num += n;
+	}
+	ASSERT (num <= 100);	// Ensure your code defaults are okay.
+	v = akl::Explode (_sAutoChordsMajorChordBias, ",");
+	num = 0;
+	for (int i = 0; i < 3; i++) 
+	{
+		int n = stoi (v[i]);
+		_vAutoChordsMajorChordBias.push_back (n);
+		num += n;
+	}
+	ASSERT (num <= 100);	// Ensure your code defaults are okay.
+
+	uint32_t nIndex = 0;
 	for each (auto sLine in _vInput)
 	{
+		_vInputCopy.push_back (sLine);
+
 		nLineNum++;
+		nIndex = nLineNum - 1;
+
 
 		std::string sTemp = akl::RemoveWhitespace (sLine, 4); // strip all ws
 
@@ -276,6 +300,10 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				v[0] = ss.str();
 			}
 
+			std::string sChordList;
+			std::string comma = "";
+			uint32_t nReplaceCount = 0;
+
 			for each (auto c in v)
 			{
 				std::vector<std::string> vChordIntervals;
@@ -310,6 +338,26 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				if (ChordRepeat (c, nNumInstances))
 					sChordName = c.substr (0, c.find ('('));
 
+				// Random Chord Replacement.
+				// Look for ? prefix
+				std::string qm = "";
+				if (sChordName[0] == '?')
+				{
+					if (_bRCR)
+					{
+						_chordBank->SetRandomChord();
+						sChordName = _chordBank->GetChordName() + _chordBank->GetChordVariation();
+						nReplaceCount++;
+						if (nReplaceCount == 1)
+							_vInputCopy[nIndex] = "#" + _vInputCopy[nIndex];
+						qm = "?";
+					}
+					else
+					{
+						sChordName = sChordName.substr (1, sChordName.size());
+					}
+				}
+
 				std::string sChordType;
 				if (!GetChordIntervals (sChordName, nRoot, vChordIntervals, sChordType))
 				{
@@ -321,7 +369,17 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 
 				for (uint8_t i = 0; i < nNumInstances; i++)
 					_vChordNames.push_back (sChordName);
+
+				// RCR: Building new chord progression string
+				sChordList += comma + qm + sChordName;
+				if (nNumInstances > 1)
+					sChordList = sChordList + "(" + std::to_string (nNumInstances) + ")";
+				comma = ", ";
 			}
+
+			// RCR
+			if (nReplaceCount)
+				_vInputCopy.insert (_vInputCopy.begin() + nIndex + 1, sChordList);
 
 			nDataLines++;
 			continue;
@@ -845,6 +903,10 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				if (_bWriteOldRuler)
 					sRuler = sRulerOld;
 			}
+			else if (vKeyValue[0] == "RandomChordReplacementKey")
+			{
+				InitChordBank (vKeyValue[1]);
+			}
 			else
 			{
 				std::string p = sLine.substr (1, sTemp.size() - 1);
@@ -1349,6 +1411,9 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (const std::string& filena
 	GenerateNoteEvents();
 
 	FinishMidiFile (ofs);
+
+	if (_bRCR)
+		akl::WriteVectorToTextFile (_sInputFile, _vInputCopy);
 
 	return nRes;
 }
@@ -2746,6 +2811,60 @@ bool CMIDIHandler::ValidBiasParam (std::string& str, uint8_t numValues)
 	return bOk;
 }
 
+// For Random Chord Replacement (RCR) handling.
+int CMIDIHandler::InitChordBank(const std::string& sKey)
+{
+	int result = 0;
+
+	_bRCR = true;
+
+	std::string sNote = sKey.substr (0, 1);
+	if (sKey.size() > 1 && (sKey[1] == 'b' || sKey[1] == '#'))
+		sNote += sKey[1];
+
+	// Is it a minor key?
+	bool bMinorKey = false;
+	size_t pos = sKey.find ("m");
+	if (pos != std::string::npos)
+		bMinorKey = true;
+
+	_chordBank = std::make_unique<CChordBank> (sNote, _vChordTypeVariationFactors);
+
+	// Create CChordBank object that will hold the chord lists.
+	// Tell CChordBank object to construct either minor or major chord list.
+	//CChordBank chordBank (sNote, _vChordTypeVariationFactors);
+	if (bMinorKey)
+	{
+		uint8_t nRootPercentage = _vAutoChordsMinorChordBias[0];
+		uint8_t nOtherMinorPercentage = _vAutoChordsMinorChordBias[1];	// The other two minor chords.
+		uint8_t nMajorPercentage = _vAutoChordsMinorChordBias[2];		// The three major chords.
+		// (Remaining percentage alloted to the diminished chord.)
+		if (!_chordBank->BuildMinor (nRootPercentage, nOtherMinorPercentage, nMajorPercentage))
+		{
+			std::ostringstream ss;
+			ss << "Chord type bias percentage (root + minor + major) exceeds 100";
+			_sStatusMessage = ss.str();
+			return 1; //CMIDIHandler::StatusCode::InvalidChordsBiasPercentage;
+		}
+	}
+	else
+	{
+		uint8_t nRootPercentage = _vAutoChordsMajorChordBias[0];
+		uint8_t nOtherMajorPercentage = _vAutoChordsMajorChordBias[1];	// The other two major chords.
+		uint8_t nMinorPercentage = _vAutoChordsMajorChordBias[2];		// The three minor chords.
+		// (Remaining percentage alloted to the diminished chord.)
+		if (!_chordBank->BuildMajor (nRootPercentage, nOtherMajorPercentage, nMinorPercentage))
+		{
+			std::ostringstream ss;
+			ss << "Chord type bias percentage (root + major + minor) exceeds 100";
+			_sStatusMessage = ss.str();
+			return 1; //CMIDIHandler::StatusCode::InvalidChordsBiasPercentage;
+		}
+	}
+
+	return result;
+}
+
 std::string CMIDIHandler::GetStatusMessage()
 {
 	return _sStatusMessage;
@@ -2754,7 +2873,7 @@ std::string CMIDIHandler::GetStatusMessage()
 //-----------------------------------------------------------------------------
 // Static class members
 
-std::string CMIDIHandler::_version = "0.4";
+std::string CMIDIHandler::_version = "0.41";
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
 std::map<std::string, std::vector<uint8_t>>CMIDIHandler::_mMelodyNotes;

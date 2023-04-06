@@ -6,6 +6,12 @@ SMFFTI - Simple MIDI Files From Text Input
 
 See the User Guide for everything you need to know about using it.
 
+v0.41	April 6, 2023
+Random Chord Replacement (RCR). Leverages some of the Auto-Chords processing
+to allow individual chords in a progression to be randomly replaced, using the 
+question mark (?) and a placeholder. Enable using ew command parameter 
++RandomChordReplacementKey.
+
 v0.4	March 24, 2023
 Auto-chords. Main routine for this is CMIDIHandler::CopyFileWithAutoChords.
 New classes CChordBank and CAutoRhythm.

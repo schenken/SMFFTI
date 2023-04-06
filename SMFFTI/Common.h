@@ -3,6 +3,7 @@
 namespace akl {
 
 size_t LoadTextFileIntoVector(const std::string& filename, std::vector<std::string>& v);
+int WriteVectorToTextFile (const std::string filename, const std::vector<std::string> v);
 
 std::string RemoveWhitespace (const std::string& s, uint8_t mode);
 
