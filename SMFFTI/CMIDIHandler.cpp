@@ -185,13 +185,17 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 	}
 	ASSERT (num <= 100);	// Ensure your code defaults are okay.
 
-	uint32_t nIndex = 0;
+	// RCR For remembering line positions when saving the previous
+	// chord progression back to the original file.
+	uint32_t nRCRIndex = 0;
+	uint32_t nRCRLineOffset = 0;
+
 	for each (auto sLine in _vInput)
 	{
 		_vInputCopy.push_back (sLine);
 
 		nLineNum++;
-		nIndex = nLineNum - 1;
+		nRCRIndex = (nLineNum - 1) + nRCRLineOffset;
 
 
 		std::string sTemp = akl::RemoveWhitespace (sLine, 4); // strip all ws
@@ -349,7 +353,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 						sChordName = _chordBank->GetChordName() + _chordBank->GetChordVariation();
 						nReplaceCount++;
 						if (nReplaceCount == 1)
-							_vInputCopy[nIndex] = "#" + _vInputCopy[nIndex];
+							_vInputCopy[nRCRIndex] = "#" + _vInputCopy[nRCRIndex];
 						qm = "?";
 					}
 					else
@@ -379,7 +383,10 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 
 			// RCR
 			if (nReplaceCount)
-				_vInputCopy.insert (_vInputCopy.begin() + nIndex + 1, sChordList);
+			{
+				_vInputCopy.insert (_vInputCopy.begin() + nRCRIndex + 1, sChordList);
+				nRCRLineOffset++;
+			}
 
 			nDataLines++;
 			continue;
@@ -907,6 +914,15 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			{
 				InitChordBank (vKeyValue[1]);
 			}
+			else if (vKeyValue[0] == "AutoMelodyDontUsePentatonic")
+			{
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
+				{
+					_sStatusMessage = "Invalid +AutoMelodyDontUsePentatonic value (valid: 0 or 1).";
+					return StatusCode::InvalidAutoMelodyDontUsePentatonic;
+				}
+				_bAutoMelodyDontUsePentatonic = nVal == 1;
+			}
 			else
 			{
 				std::string p = sLine.substr (1, sTemp.size() - 1);
@@ -1020,6 +1036,38 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 	{
 		_sStatusMessage = "Number of chords does not match number of notes. (Check your + signs.)";
 		return StatusCode::NumberOfChordsDoesNotMatchNoteCount;
+	}
+
+	// Auto-Melody: If specified, the melody line can include a few instances
+	// of the additional notes from the pentatonic scale of the chord.
+	if (!_bAutoMelodyDontUsePentatonic)
+	{
+		for (int i = 0; i < 2; i++)
+		{
+			// Major chords
+			_mMelodyNotes["maj"].push_back (2);
+			_mMelodyNotes["maj"].push_back (9);
+			_mMelodyNotes["7"].push_back (2);
+			_mMelodyNotes["7"].push_back (9);
+			_mMelodyNotes["maj7"].push_back (2);
+			_mMelodyNotes["maj7"].push_back (9);
+			_mMelodyNotes["9"].push_back (2);
+			_mMelodyNotes["9"].push_back (9);
+			_mMelodyNotes["maj9"].push_back (2);
+			_mMelodyNotes["maj9"].push_back (9);
+			_mMelodyNotes["add9"].push_back (2);
+			_mMelodyNotes["add9"].push_back (9);
+
+			// Minor chords
+			_mMelodyNotes["m"].push_back (5);
+			_mMelodyNotes["m"].push_back (10);
+			_mMelodyNotes["m7"].push_back (5);
+			_mMelodyNotes["m7"].push_back (10);
+			_mMelodyNotes["m9"].push_back (5);
+			_mMelodyNotes["m9"].push_back (10);
+			_mMelodyNotes["madd9"].push_back (5);
+			_mMelodyNotes["madd9"].push_back (10);
+		}
 	}
 
 	return result;
@@ -2873,7 +2921,7 @@ std::string CMIDIHandler::GetStatusMessage()
 //-----------------------------------------------------------------------------
 // Static class members
 
-std::string CMIDIHandler::_version = "0.41";
+std::string CMIDIHandler::_version = "0.42";
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
 std::map<std::string, std::vector<uint8_t>>CMIDIHandler::_mMelodyNotes;
@@ -2903,16 +2951,25 @@ CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 	_mChordTypes.insert (std::pair<std::string, std::string>("dim7",	"3, 6, 9"));		// Diminished 7th
 	_mChordTypes.insert (std::pair<std::string, std::string>("m7b5",	"3, 6, 10"));		// Half-Diminished 7th
 
-	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("maj",    { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
-	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("7",      { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9, 10 } ));
-	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("maj7",   { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9, 11 } ));
-	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("9",      { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
-	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("maj9",   { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
-	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("add9",   { 0, 0, 0, 2, 4, 4, 7, 7, 7, 9 } ));
-	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("m",      { 0, 0, 0, 3, 5, 5, 7, 7, 7, 10 } ));
-	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("m7",     { 0, 0, 0, 3, 5, 5, 7, 7, 7, 10 } ));
-	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("m9",     { 0, 0, 0, 3, 5, 5, 7, 7, 7, 10, 14 } ));
-	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("madd9",  { 0, 0, 0, 3, 5, 5, 7, 7, 7, 10, 14 } ));
+	// Auto-Melody: Semitone positions of all the notes available.
+	// (The +AutoMelodyUsePentatonic parameter allows you to expand the notes in the major and minor
+	// chords to include the additional notes of the chord's respective pentatonic scale.)
+	//
+	// Major chords
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("maj",    { 0, 0, 0, 0, 0, 4, 4, 4, 7, 7, 7, 7, 7 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("7",      { 0, 0, 0, 0, 0, 4, 4, 4, 7, 7, 7, 7, 7, 10, 10 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("maj7",   { 0, 0, 0, 0, 0, 4, 4, 4, 7, 7, 7, 7, 7, 11, 11 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("9",      { 0, 0, 0, 0, 0, 4, 4, 4, 7, 7, 7, 7, 7 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("maj9",   { 0, 0, 0, 0, 0, 4, 4, 4, 7, 7, 7, 7, 7 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("add9",   { 0, 0, 0, 0, 0, 4, 4, 4, 7, 7, 7, 7, 7 } ));
+	//
+	// Minor chords
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("m",      { 0, 0, 0, 0, 0, 3, 3, 3, 7, 7, 7, 7, 7 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("m7",     { 0, 0, 0, 0, 0, 3, 3, 3, 7, 7, 7, 7, 7 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("m9",     { 0, 0, 0, 0, 0, 3, 3, 3, 7, 7, 7, 7, 7, 14, 14 } ));
+	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("madd9",  { 0, 0, 0, 0, 0, 3, 3, 3, 7, 7, 7, 7, 7, 14, 14 } ));
+	//
+	// Suspended and diminished chords
 	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("sus2",   { 0, 0, 0, 0, 2, 2, 7, 7, 7 } ));
 	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("7sus2",  { 0, 0, 0, 0, 2, 2, 7, 7, 7, 10 } ));
 	_mMelodyNotes.insert (std::pair<std::string, std::vector<uint8_t>>("sus4",   { 0, 0, 0, 0, 5, 5, 7, 7, 7 } ));

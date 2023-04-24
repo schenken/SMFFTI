@@ -231,7 +231,7 @@ void PrintUsage()
 
         "where <outfile> is the name of the text command file.\n\n"
 
-        "Usage 3 - Generate modified text command file to contain an auto-rhythm:\n\n"
+        "Usage 3 - Generate modified text command file containing a randomized rhythm pattern:\n\n"
 
         "    SMFFTI.exe -ar <infile> <outfile>\n\n"
 
@@ -239,7 +239,12 @@ void PrintUsage()
         "and <outfile> is the name of a modified version of <infile> that \n"
         "contains an automatically-generated rhythm.\n\n"
 
-        "Usage 4 - Generate text file to contain generic random melodies:\n\n"
+        "Usage 4 - Generate modified text command file containing a randomized chord\n"
+        "progression along with a randomized rhythm pattern:\n\n"
+
+        "    SMFFTI.exe -ac <infile> <outfile>\n\n"
+
+        "Usage 5 - Generate text file to contain generic random melodies:\n\n"
 
         "    SMFFTI.exe -grm <outfile>\n\n"
 

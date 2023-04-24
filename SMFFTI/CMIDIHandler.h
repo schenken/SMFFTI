@@ -122,7 +122,8 @@ public:
 		InvalidAutoChordsCTV_dim_Value,
 		InvalidAutoChordsCTV_dim7_Value,
 		InvalidAutoChordsCTV_m7b5_Value,
-		InvalidWriteOldRuler
+		InvalidWriteOldRuler,
+		InvalidAutoMelodyDontUsePentatonic
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -352,6 +353,10 @@ private:
 	// For RandomChordReplacement (RCR)
 	std::vector<std::string> _vInputCopy;
 	bool _bRCR = false;
+
+	// 230424 Auto-Melody: Inclusion of pentatonic notes
+	// now controlled by parameter +AutoMelodyUsePentatonic.
+	bool _bAutoMelodyDontUsePentatonic = false;
 
 	//---------------------------------------------------------------------
 	// Static class members
