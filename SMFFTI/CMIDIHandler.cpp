@@ -1305,37 +1305,90 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 	if (pos != std::string::npos)
 		bMinorKey = true;
 
-	// Create CChordBank object that will hold the chord lists.
-	// Tell CChordBank object to construct either minor or major chord list.
-	CChordBank chordBank (sNote, _vChordTypeVariationFactors);
+	// Create two CChordBank objects that will hold the chord lists. One is for the main key,
+	// the other is a Modal Interchange version, which *may* be used for chord selection (T2015A).
+	std::vector<std::unique_ptr<CChordBank>> vChordBank;
+	vChordBank.push_back (std::make_unique<CChordBank> (sNote, _vChordTypeVariationFactors));
+	vChordBank.push_back (std::make_unique<CChordBank> (sNote, _vChordTypeVariationFactors));
+
+	// Initialize index values for referencing the relevant chord bank.
+	uint8_t iCB_Main = 1;
+	uint8_t iCB_ModInt = 0;
 	if (bMinorKey)
 	{
-		uint8_t nRootPercentage = _vAutoChordsMinorChordBias[0];
-		uint8_t nOtherMinorPercentage = _vAutoChordsMinorChordBias[1];	// The other two minor chords.
-		uint8_t nMajorPercentage = _vAutoChordsMinorChordBias[2];		// The three major chords.
-		// (Remaining percentage alloted to the diminished chord.)
-		if (!chordBank.BuildMinor (nRootPercentage, nOtherMinorPercentage, nMajorPercentage))
-		{
-			std::ostringstream ss;
-			ss << "Chord type bias percentage (root + minor + major) exceeds 100";
-			_sStatusMessage = ss.str();
-			return CMIDIHandler::StatusCode::InvalidChordsBiasPercentage;
-		}
+		iCB_Main = 0;
+		iCB_ModInt = 1;
 	}
-	else
+
+	// Minor version
+	uint8_t nRootPercentage = _vAutoChordsMinorChordBias[0];
+	uint8_t nOtherMinorPercentage = _vAutoChordsMinorChordBias[1];	// The other two minor chords.
+	uint8_t nMajorPercentage = _vAutoChordsMinorChordBias[2];		// The three major chords.
+	// (Remaining percentage alloted to the diminished chord.)
+	if (!vChordBank[iCB_Main]->BuildMinor (nRootPercentage, nOtherMinorPercentage, nMajorPercentage))
 	{
-		uint8_t nRootPercentage = _vAutoChordsMajorChordBias[0];
-		uint8_t nOtherMajorPercentage = _vAutoChordsMajorChordBias[1];	// The other two major chords.
-		uint8_t nMinorPercentage = _vAutoChordsMajorChordBias[2];		// The three minor chords.
-		// (Remaining percentage alloted to the diminished chord.)
-		if (!chordBank.BuildMajor (nRootPercentage, nOtherMajorPercentage, nMinorPercentage))
-		{
-			std::ostringstream ss;
-			ss << "Chord type bias percentage (root + major + minor) exceeds 100";
-			_sStatusMessage = ss.str();
-			return CMIDIHandler::StatusCode::InvalidChordsBiasPercentage;
-		}
+		std::ostringstream ss;
+		ss << "Chord type bias percentage (root + minor + major) exceeds 100";
+		_sStatusMessage = ss.str();
+		return CMIDIHandler::StatusCode::InvalidChordsBiasPercentage;
 	}
+
+	// Major version.
+	nRootPercentage = _vAutoChordsMajorChordBias[0];
+	uint8_t nOtherMajorPercentage = _vAutoChordsMajorChordBias[1];	// The other two major chords.
+	uint8_t nMinorPercentage = _vAutoChordsMajorChordBias[2];		// The three minor chords.
+	// (Remaining percentage alloted to the diminished chord.)
+	if (!vChordBank[iCB_ModInt]->BuildMajor (nRootPercentage, nOtherMajorPercentage, nMinorPercentage))
+	{
+		std::ostringstream ss;
+		ss << "Chord type bias percentage (root + major + minor) exceeds 100";
+		_sStatusMessage = ss.str();
+		return CMIDIHandler::StatusCode::InvalidChordsBiasPercentage;
+	}
+
+
+	//CChordBank chordBank (sNote, _vChordTypeVariationFactors);
+	//if (bMinorKey)
+	//{
+	//	uint8_t nRootPercentage = _vAutoChordsMinorChordBias[0];
+	//	uint8_t nOtherMinorPercentage = _vAutoChordsMinorChordBias[1];	// The other two minor chords.
+	//	uint8_t nMajorPercentage = _vAutoChordsMinorChordBias[2];		// The three major chords.
+	//	// (Remaining percentage alloted to the diminished chord.)
+	//	if (!chordBank.BuildMinor (nRootPercentage, nOtherMinorPercentage, nMajorPercentage))
+	//	{
+	//		std::ostringstream ss;
+	//		ss << "Chord type bias percentage (root + minor + major) exceeds 100";
+	//		_sStatusMessage = ss.str();
+	//		return CMIDIHandler::StatusCode::InvalidChordsBiasPercentage;
+	//	}
+	//}
+	//else
+	//{
+	//	uint8_t nRootPercentage = _vAutoChordsMajorChordBias[0];
+	//	uint8_t nOtherMajorPercentage = _vAutoChordsMajorChordBias[1];	// The other two major chords.
+	//	uint8_t nMinorPercentage = _vAutoChordsMajorChordBias[2];		// The three minor chords.
+	//	// (Remaining percentage alloted to the diminished chord.)
+	//	if (!chordBank.BuildMajor (nRootPercentage, nOtherMajorPercentage, nMinorPercentage))
+	//	{
+	//		std::ostringstream ss;
+	//		ss << "Chord type bias percentage (root + major + minor) exceeds 100";
+	//		_sStatusMessage = ss.str();
+	//		return CMIDIHandler::StatusCode::InvalidChordsBiasPercentage;
+	//	}
+	//}
+
+
+	// T2015A Randomizer for chance of Modal Interchange.
+	// 100-element vector, each element of which can be 0 or 1, indicating which
+	// chord bank to use for selecting the random chord.
+	uint8_t nModIntBias = 10;	// Valid range 0 - 25, indicating a percentage bias for Mod Int.
+	std::vector<uint8_t> vChordBankChoice;
+	for (int i = 0; i < 100; i++)
+	{
+		uint8_t whichChordBank = i < nModIntBias ? iCB_ModInt : iCB_Main;
+		vChordBankChoice.push_back (whichChordBank);
+	}
+	std::uniform_int_distribution<uint16_t> randModInt (0, 99);
 
 	//--------------------------------------------------------------------------
 	// Output copy of the input file with the generated rhythm.
@@ -1380,14 +1433,19 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 				std::string sComma = "";
 				for (uint32_t k = 0; k < nNoteCount; k++)
 				{
+					// T2015A Which chord bank to use - the main one or the Modal Interchange one.
+					uint16_t iRandModInt = randModInt (_eng);
+					uint8_t iCB = vChordBankChoice[iRandModInt];
+
 					// This sets the chosen random chord in the CChordBank object;
 					// you then have to interrogate it to retrieve the actual chord value.
-					chordBank.SetRandomChord();
+					vChordBank[iCB]->SetRandomChord();
 
 					// Now apply a possible random chord type variation.
-					std::string sChordVar = chordBank.GetChordVariation();
+					std::string sChordVar = vChordBank[iCB]->GetChordVariation();
 
-					ofs << sComma << chordBank.GetChordName() << sChordVar;
+					std::string sChordName = vChordBank[iCB]->GetChordName();
+					ofs << sComma << sChordName << sChordVar;
 					sComma = ", ";
 				}
 				ofs << std::endl;
