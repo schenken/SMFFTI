@@ -6,6 +6,14 @@ SMFFTI - Simple MIDI Files From Text Input
 
 See the User Guide for everything you need to know about using it.
 
+v0.43	July 11, 2023
+T2015A For both Auto-Chords (-ac mode) and Random Chord Replacement (RCR), it is
+now possible to specify Modal Interchange (MI). For example, if the main key is 
+C Minor, then MI can choose chords from the corresponding C Major key.
+New parameter +ModalInterchangeChancePercentage has been added, which can be set
+in range 0 - 100. Zero means no MI; 100 means *always* use chords from the opposite
+key.
+
 v0.42	April 24, 2023
 Added parameter +AutoMelodyDontUsePentatonic which, if set to 1, tells SMFFTI
 to NOT use pentatonic scale notes for Auto-Melody. Also fixed bug for RCR that

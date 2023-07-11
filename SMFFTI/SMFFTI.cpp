@@ -174,6 +174,12 @@ void DoStuff (int argc, char* argv[])
     std::string sOutFile (argv[iOutFile]);
     CMIDIHandler midiH (sInFile);
 
+    // T2015A We need to inform the CMIDIHandler object if we are using Auto-Chords mode.
+    // This is because, if so, we must ignore +RandomChordReplacementKey if set. In other
+    // words, Auto-Chords trumps RCR.
+    if (bAutoChords)
+        midiH.UsingAutoChords();
+
     // Safety
     if (sInFile == sOutFile)
     {

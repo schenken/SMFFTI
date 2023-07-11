@@ -144,6 +144,9 @@ public:
 	// randomly-generated chords (over 4 bars).
 	StatusCode CopyFileWithAutoChords (std::string filename, bool bOverwriteOutFile);
 
+	// T2015A
+	void UsingAutoChords() { _bAutoChords = true; }
+
 	StatusCode GenRandMelodies (std::string filename, bool bOverwriteOutFile);
 
 	std::string GetStatusMessage();
@@ -366,6 +369,7 @@ private:
 
 	// T2015A 
 	uint8_t _nModalInterchangeChancePercentage = 0;
+	bool _bAutoChords = false;
 
 	//---------------------------------------------------------------------
 	// Static class members

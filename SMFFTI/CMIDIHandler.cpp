@@ -310,6 +310,8 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 
 			// T2015A
 			std::uniform_int_distribution<uint16_t> randModInt (0, 99);
+			if (_bRCR)
+				InitChordBank (_sRCRKey);
 
 			for each (auto c in v)
 			{
@@ -919,8 +921,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			}
 			else if (vKeyValue[0] == "RandomChordReplacementKey")
 			{
-				_sRCRKey = vKeyValue[1];
-				_bRCR = true;
+				if (!_bAutoChords)
+				{
+					_sRCRKey = vKeyValue[1];
+					_bRCR = true;
+				}
 			}
 			else if (vKeyValue[0] == "AutoMelodyDontUsePentatonic")
 			{
@@ -1434,9 +1439,6 @@ CMIDIHandler::StatusCode CMIDIHandler::GenRandMelodies (std::string filename, bo
 
 CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (const std::string& filename, bool bOverwriteOutFile)
 {
-	if (_bRCR)
-		InitChordBank (_sRCRKey);
-
 	std::ofstream ofs;
 
 	StatusCode nRes = InitMidiFile (ofs, filename, bOverwriteOutFile);
@@ -2846,7 +2848,7 @@ bool CMIDIHandler::ValidBiasParam (std::string& str, uint8_t numValues)
 	return bOk;
 }
 
-// For Random Chord Replacement (RCR) handling.
+// For Auto-Chords and Random Chord Replacement (RCR) handling.
 void CMIDIHandler::InitChordBank (const std::string& sKey)
 {
 	// Only one execution of this routine, for either Auto-Chords or RCR.
@@ -2909,7 +2911,7 @@ std::string CMIDIHandler::GetStatusMessage()
 //-----------------------------------------------------------------------------
 // Static class members
 
-std::string CMIDIHandler::_version = "0.42";
+std::string CMIDIHandler::_version = "0.43";
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
 std::map<std::string, std::vector<uint8_t>>CMIDIHandler::_mMelodyNotes;
