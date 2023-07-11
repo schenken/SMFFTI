@@ -123,7 +123,8 @@ public:
 		InvalidAutoChordsCTV_dim7_Value,
 		InvalidAutoChordsCTV_m7b5_Value,
 		InvalidWriteOldRuler,
-		InvalidAutoMelodyDontUsePentatonic
+		InvalidAutoMelodyDontUsePentatonic,
+		InvalidModalInterchangeChancePercentage
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -181,7 +182,8 @@ private:
 
 	bool ValidBiasParam (std::string& str, uint8_t numValues);
 
-	int InitChordBank (const std::string& sKey);
+	void InitChordBank (const std::string& sKey);
+	bool _bChordBankInit = false;
 
 	// File with MIDI content directives.
 	std::string _sInputFile;
@@ -308,7 +310,7 @@ private:
 	// 0 means alternating notes and gaps.
 	// 50 means 50 % chance of consecutive notes, ie.no gap in - between.
 	// 100 means no gaps (except even-numbered 32nds, when no note is possible).
-	uint32_t _sAutoRhythmConsecutiveNoteChancePercentage = 25;
+	uint32_t _nAutoRhythmConsecutiveNoteChancePercentage = 25;
 
 	// Improved ruler, displaying characters only at 1/16th notes.
 	// 1/4 notes now aligned with dollar sign and vertical bars.
@@ -347,16 +349,23 @@ private:
 	// creates a modfied command file (eg. Auto-chords).
 	bool _bWriteOldRuler = 0;
 
-	// CChordBank object specifically for Random Chord Replacement (RCR) mode.
-	std::unique_ptr<CChordBank> _chordBank;
+	// T2015A
+	std::vector<std::unique_ptr<CChordBank>> _vChordBank;
+	uint8_t _iCB_Main = 1;
+	uint8_t _iCB_ModInt = 0;
+	std::vector<uint8_t> _vChordBankChoice;
 
 	// For RandomChordReplacement (RCR)
 	std::vector<std::string> _vInputCopy;
 	bool _bRCR = false;
+	std::string _sRCRKey;
 
 	// 230424 Auto-Melody: Inclusion of pentatonic notes
 	// now controlled by parameter +AutoMelodyUsePentatonic.
 	bool _bAutoMelodyDontUsePentatonic = false;
+
+	// T2015A 
+	uint8_t _nModalInterchangeChancePercentage = 0;
 
 	//---------------------------------------------------------------------
 	// Static class members

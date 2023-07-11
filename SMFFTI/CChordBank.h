@@ -21,8 +21,8 @@ public:
 	// These lists constitute the pool of chords from which progressions are randomly
 	// created. Biased according to the percentages specified in the arguments.
 	//
-	int32_t BuildMinor (uint8_t nRootPercent, uint8_t nOtherMinorPercent, uint8_t nMajorPercent);
-	int32_t BuildMajor (uint8_t nRootPercent, uint8_t nOtherMajorPercent, uint8_t nMinorPercent);
+	void BuildMinor (uint8_t nRootPercent, uint8_t nOtherMinorPercent, uint8_t nMajorPercent);
+	void BuildMajor (uint8_t nRootPercent, uint8_t nOtherMajorPercent, uint8_t nMinorPercent);
 
 	// Random chord selector.
 	void SetRandomChord();
@@ -63,6 +63,7 @@ protected:
 	int32_t BuildMajorChordVariations (const std::vector<uint32_t>& ctv);
 	int32_t BuildMinorChordVariations (const std::vector<uint32_t>& ctv);
 	int32_t BuildDimChordVariations (const std::vector<uint32_t>& ctv);
+
 
 	//------------------------------------------------------------------------------------------
 	// Static class members

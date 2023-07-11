@@ -16,19 +16,13 @@ CChordBank::CChordBank (const std::string& sNote, const std::vector<uint32_t>& c
 	BuildDimChordVariations (ctv);
 }
 
-int CChordBank::BuildMinor (uint8_t nRootPercent, uint8_t nOtherMinorPercent, uint8_t nMajorPercent)
+void CChordBank::BuildMinor (uint8_t nRootPercent, uint8_t nOtherMinorPercent, uint8_t nMajorPercent)
 {
 	// Minor key intervals: T, S, T, T, S, T, T
 	//
 	// So what we do is build the list according to the percentages specified.
 	// If the total percentage is less than 100, the remaining percentage is alloted to the dim chord.
 	// If the total percentage is greater than 100, an error value is returned.
-
-	int result = 1;
-
-	// Too many percent.
-	if (nRootPercent + nOtherMinorPercent + nMajorPercent > 100)
-		return 0;
 
 	uint8_t iChordCount = 0;
 
@@ -71,19 +65,11 @@ int CChordBank::BuildMinor (uint8_t nRootPercent, uint8_t nOtherMinorPercent, ui
 	}
 
 	ASSERT (_vChords.size() == 100);
-
-	return result;
 }
 
-int CChordBank::BuildMajor (uint8_t nRootPercent, uint8_t nOtherMajorPercent, uint8_t nMinorPercent)
+void CChordBank::BuildMajor (uint8_t nRootPercent, uint8_t nOtherMajorPercent, uint8_t nMinorPercent)
 {
 	// Major key intervals: T, T, S, T, T, T, S
-
-	int result = 1;
-
-	// Too many percent.
-	if (nRootPercent + nOtherMajorPercent + nMinorPercent > 100)
-		return 0;
 
 	uint8_t iChordCount = 0;
 
@@ -126,8 +112,6 @@ int CChordBank::BuildMajor (uint8_t nRootPercent, uint8_t nOtherMajorPercent, ui
 	}
 
 	ASSERT (_vChords.size() == 100);
-
-	return result;
 }
 
 void CChordBank::SetRandomChord()
