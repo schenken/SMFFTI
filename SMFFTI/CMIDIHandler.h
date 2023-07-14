@@ -124,7 +124,8 @@ public:
 		InvalidAutoChordsCTV_m7b5_Value,
 		InvalidWriteOldRuler,
 		InvalidAutoMelodyDontUsePentatonic,
-		InvalidModalInterchangeChancePercentage
+		InvalidModalInterchangeChancePercentage,
+		InvalidChordInMidiFile
 	};
 
 	CMIDIHandler (std::string sInputFile);
@@ -146,6 +147,10 @@ public:
 
 	// T2015A
 	void UsingAutoChords() { _bAutoChords = true; }
+
+	// T2O4GU
+	StatusCode ConvertMIDIToSMFFTI (std::string inFile, std::string outFile, bool bOverwriteOutFile);
+	std::string IsValidChordType (const std::vector<uint16_t>& vNotes, bool& bMinor);
 
 	StatusCode GenRandMelodies (std::string filename, bool bOverwriteOutFile);
 
@@ -384,6 +389,7 @@ private:
 	static std::map<std::string, std::vector<uint8_t>> _mMelodyNotes;
 
 	static std::map<std::string, uint8_t>_mChromaticScale;
+	static std::map<std::string, uint8_t>_mChromaticScale2;
 
 	static std::vector<std::string> _vRFGChords;
 

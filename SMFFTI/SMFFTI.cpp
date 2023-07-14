@@ -136,11 +136,30 @@ void DoStuff (int argc, char* argv[])
             PrintError (ss.str());
             return;
         }
-
         bAutoChords = true;
         iInFile = 2;
         iOutFile = 3;
     }
+
+    // T2O4GU MIDI To SMFFTI (mode -m)
+    bool bMIDIToSMFFTI = false;
+    if (std::string(argv[1]) == "-m")
+    {
+        if (argc < 4)
+        {
+            std::ostringstream ss;
+            ss << "Command specified incorrectly. The MIDI-To-SMFFTI command should be\n"
+                << "something like:\n\n"
+                << "    SMFFTI.exe -m mymidi.mid mymidi.txt\n";
+            PrintError (ss.str());
+            return;
+        }
+
+        bMIDIToSMFFTI = true;
+        iInFile = 2;
+        iOutFile = 3;
+    }
+
 
     // Generic Randomized Melodies (-grm)
     // (No input file required.)
@@ -184,6 +203,14 @@ void DoStuff (int argc, char* argv[])
     if (sInFile == sOutFile)
     {
         PrintError ("Input and output filenames must not be the same.");
+        return;
+    }
+
+    // T2O4GU MIDI-To-SMFFTI
+    if (bMIDIToSMFFTI)
+    {
+        if (midiH.ConvertMIDIToSMFFTI (sInFile, sOutFile, bOverwriteOutFile) != CMIDIHandler::StatusCode::Success)
+            PrintError (midiH.GetStatusMessage());
         return;
     }
 
@@ -253,6 +280,10 @@ void PrintUsage()
         "Usage 5 - Generate text file to contain generic random melodies:\n\n"
 
         "    SMFFTI.exe -grm <outfile>\n\n"
+
+        "Usage 6 - Generate SMFFTI command lines from MIDI file:\n\n"
+
+        "    SMFFTI.exe -m <infile> <outfile>\n\n"
 
         "Consult the manual for more information on all the above operations.\n\n"
         ;

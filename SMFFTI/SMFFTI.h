@@ -6,6 +6,10 @@ SMFFTI - Simple MIDI Files From Text Input
 
 See the User Guide for everything you need to know about using it.
 
+v0.44	July 14, 2023
+T2O4GU Facility to read MIDI file and convert chord data to SMFFTI command-line
+format (ConvertMIDIToSMFFTI).
+
 v0.43	July 11, 2023
 T2015A For both Auto-Chords (-ac mode) and Random Chord Replacement (RCR), it is
 now possible to specify Modal Interchange (MI). For example, if the main key is 

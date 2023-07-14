@@ -1395,6 +1395,555 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 	return nRes;
 }
 
+CMIDIHandler::StatusCode CMIDIHandler::ConvertMIDIToSMFFTI (std::string inFile, std::string outFile, bool bOverwriteOutFile)
+{
+	StatusCode nRes = StatusCode::Success;
+
+	struct NoteEvent
+	{
+		bool bOn;
+		uint16_t nTime;
+		uint16_t nNoteNum;
+
+		NoteEvent (bool bOn_, uint16_t t, uint16_t n) : bOn (bOn_), nTime (t), nNoteNum (n) {}
+	};
+	std::vector<NoteEvent> vNoteEvents;
+
+	// T2O4GU Holds chord details that have been extracted from MIDI file.
+	struct ChordDetails
+	{
+		uint16_t nStart;    // where the chord begins, in 1/32nds.
+		uint16_t nEnd;
+		std::vector<uint16_t> vNoteNumber;   // eg. 60 = C3
+
+		ChordDetails (uint16_t nS, uint16_t nE, uint16_t nNote)
+		{
+			nStart = nS;
+			nEnd = nE;
+			vNoteNumber.push_back (nNote);
+		}
+	};
+	std::vector<ChordDetails> vChordDetails;  // List of chords.
+
+	// Determines the length of the chord.
+	//      0 = Length of first (earliest) note.
+	//      1 = Maximize: From start of first Note On to last Note Off.
+	//      2 = Minimize: From last Note On to first Note Off, ie. length of overlap of all notes.
+	int chordLengthType = 0;
+
+    std::string chunkType (4, '\0');
+    uint32_t n32;
+    uint16_t n16;
+    uint16_t nNumberTracks = 0;
+
+    auto Swap32 = [](uint32_t n)
+    {
+        return (((n >> 24) & 0xff) | ((n << 8) & 0xff0000) | ((n >> 8) & 0xff00) | ((n << 24) & 0xff000000));
+    };
+
+    auto Swap16 = [](uint16_t n)
+    {
+        return ((n >> 8) | (n << 8));
+    };
+
+    // Assembles a variable-length variable (from the track buffer)
+    auto ReadValue = [](std::vector<char> vBuf, uint32_t& pos)
+    {
+        uint32_t nValue = 0;
+        uint8_t nByte = 0;
+
+        nValue = vBuf[pos++];
+
+        if (nValue & 0x80)
+        {
+            // Extract bottom 7 bits of byte
+            nValue &= 0x7F;
+
+            do
+            {
+                // Next byte
+                nByte = vBuf[pos++];
+
+                // Construct value by setting bottom 7 bits, then shifting 7 bits.
+                nValue = (nValue << 7) | (nByte & 0x7F);
+
+            } while (nByte & 0x80);
+
+        }
+
+        return nValue;
+    };
+
+    auto ReadString = [](std::vector<char> vBuf, uint32_t nLen, uint32_t& pos)
+    {
+        std::string s (vBuf.begin() + pos, vBuf.begin() + pos + nLen);
+        pos += nLen;
+        s.erase (s.find_last_not_of ('\0') + 1);            // strip trailing nulls
+        s.erase (s.find_last_not_of (" \t\n\r\f\v") + 1);   // strip trailing whitespace
+        return s;
+    };
+
+    // Convert, say, 5 to "0000000000000101"
+    auto BitString8 = [](uint8_t n)
+    {
+        std::string x;
+        for (int i = 7; i >= 0; i--)
+        {
+            char a = n & (1 << i) ? '1' : '0';
+            x += a;
+        }
+        return x;
+    };
+
+	std::ifstream ifs (inFile, std::fstream::in | std::ios::binary);
+
+    // ------------------------------------------------------------------------------
+    // HEADER CHUNK
+    ifs.read (&chunkType[0], 4);
+    if (chunkType == "MThd")
+    {
+        // get length of header - should be 6.
+        ifs.read ((char*)&n32, 4);
+        uint32_t hdrLen = Swap32 (n32);
+
+        // Header data consists of 3 words:
+        //
+        //  1. Format:
+        //      0 = single track
+        //      1 = one or more simultaneous tracks
+        //      2 = one or more sequential indepedent single-track patterns.
+        //
+        //  2. No. Tracks
+        //
+        //  3. Divsion, which specifies meaning of delta-times:
+        //
+        //       bit 15       bits 14 thru 8             bits 7 thru 0
+        //         0          ------- ticks per quarter note ---------
+        //         1          negative SMPTE format      ticks per frame
+
+        ifs.read ((char*)&n16, 2);
+        uint16_t nFileFormat = Swap16 (n16);
+
+        ifs.read ((char*)&n16, 2);
+        nNumberTracks = Swap16 (n16);
+
+        ifs.read ((char*)&n16, 2);
+        uint16_t nDivision = Swap16 (n16);
+    }
+
+    // ------------------------------------------------------------------------------
+    // TRACK CHUNKS
+    for (uint16_t nTrack = 0; nTrack < nNumberTracks; nTrack++)
+    {
+        ifs.read (&chunkType[0], 4);
+        if (chunkType == "MTrk")
+        {
+            // get length of track data.
+            ifs.read ((char*)&n32, 4);
+            uint32_t trkLen = Swap32 (n32);
+
+            // Read all track data into buffer.
+            std::vector<char> trackBuf (trkLen);
+            ifs.read (&trackBuf[0], trkLen);
+
+            uint32_t offset = 0;
+
+            // Now we're dealing with a series of <delta-time><event> pairs.
+            bool bEndOfTrack = false;
+            uint8_t nPreviousStatus = 0;
+
+            uint32_t nTotalTime = 0;
+
+            while (offset < trkLen && !bEndOfTrack)
+            {
+                uint32_t nDeltaTime = 0;
+                uint8_t nStatus = 0;    // Event type, ie. MIDI, SysEx or Meta.
+
+                // Delta-time is variable length.
+                nDeltaTime = ReadValue (trackBuf, offset);
+
+                nTotalTime += nDeltaTime;
+
+                nStatus = trackBuf[offset++];
+                
+                // "Running Status": There might not always be a status value -
+                // we apply the previous one. Revert the offset in order to read
+                // the event data.
+                if (nStatus < 0x80)
+                {
+                    nStatus = nPreviousStatus;
+                    offset--;
+                }
+
+				// For the purposes of interpreting MIDI clips for conversion
+				// to SMFFTI command lines, we're interested in only a few
+				// relevant MIDI events...
+                if ((nStatus & 0xF0) == (uint8_t)EventName::NoteOff)
+                {
+                    nPreviousStatus = nStatus;
+                    uint16_t nChannel = nStatus & 0x0F;
+                    uint16_t nNoteId = trackBuf[offset++];
+                    uint16_t nNoteVelocity = trackBuf[offset++];
+
+                    // Add to events vector.
+                    vNoteEvents.push_back (NoteEvent (false, nTotalTime, nNoteId));
+                }
+                else if ((nStatus & 0xF0) == (uint8_t)EventName::NoteOn)
+                {
+                    nPreviousStatus = nStatus;
+                    uint16_t nChannel = nStatus & 0x0F;
+                    uint16_t nNoteId = trackBuf[offset++];
+                    uint16_t nNoteVelocity = trackBuf[offset++];
+
+                    // Add to events vector.
+                    vNoteEvents.push_back (NoteEvent (true, nTotalTime, nNoteId));
+                }
+                else if ((nStatus & 0xF0) == (uint8_t)EventName::SysEx)
+                {
+                    nPreviousStatus = nStatus;
+
+                    if (nStatus == 0xFF)
+                    {
+                        // Meta Message
+                        uint8_t nType = trackBuf[offset++];
+                        uint8_t nLength = ReadValue(trackBuf, offset);
+
+                        if (nType == (uint8_t)MetaEventName::MetaSequence)
+                        {
+                            // What is the byte-order of this 16-bit integer?
+                            // Assume LSB, so swap bytes.
+                            uint8_t nLSB = trackBuf[offset++];
+                            uint8_t nMSB = trackBuf[offset++];
+                            uint16_t nValue = (nMSB << 8) | nLSB;
+                        }
+                        else if (nType == (uint8_t)MetaEventName::MetaTrackName)
+                        {
+                            std::string sText = ReadString (trackBuf, nLength, offset);
+                        }
+                        else if (nType == (uint8_t)MetaEventName::MetaEndOfTrack)
+                        {
+                            bEndOfTrack = true;
+                            continue;
+                        }
+                        else if (nType == (uint8_t)MetaEventName::MetaTimeSignature)
+                        {
+                            uint16_t nn = trackBuf[offset++];
+                            uint16_t x = trackBuf[offset];
+                            uint16_t dd = (1 << trackBuf[offset++]);
+                            uint16_t cc = trackBuf[offset++];
+                            uint16_t bb = trackBuf[offset++];
+                        }
+                        else
+                        {
+                            // Unknown meta event.
+                            offset += nLength;
+                        }
+                    }
+                }
+                else
+                {
+                    std::cout << "Unrecognised Event Type: " << BitString8 (nStatus) << std::endl;
+                }
+            }
+
+            // check if EOF reached.
+            if (ifs.peek() == EOF)
+                int ak = 1;
+        }
+    }
+    ifs.close();
+
+    // Now parse the Note Event list to identify when each note starts and ends.
+    uint32_t iEvent = 0;
+    while (iEvent < vNoteEvents.size())
+    {
+        // Our primary objective is to locate when notes begin.
+        if (vNoteEvents[iEvent].bOn == false)
+        {
+            iEvent++;
+            continue;
+        }
+
+        // Now read forward to find where this note ends.
+        for (uint32_t i = iEvent + 1; i < vNoteEvents.size(); i++)
+        {
+            // Here we ignore Note On events.
+            if (vNoteEvents[i].bOn)
+                continue;
+            
+            if (vNoteEvents[i].nNoteNum == vNoteEvents[iEvent].nNoteNum)
+            {
+                // The start and end of notes in the chord may be slightly offset,
+                // so quantize start and end of notes to 1/32nds (12 ticks per 1/32nd)
+                // in order to group notes into chords.
+                float fStart = std::ceil ((vNoteEvents[iEvent].nTime / 12.0f) - 0.6f);
+                float fEnd = std::ceil ((vNoteEvents[i].nTime / 12.0f) - 0.6f);
+                //float fLen = fEnd - fStart;
+
+                uint32_t nStart = (uint32_t)fStart;
+                uint32_t nEnd = (uint32_t)fEnd;
+                //uint32_t nLen = (uint32_t)fLen;
+
+                // See if vChordDetails already has any notes for this "chord".
+                // "Chord" is defined as any group of notes which overlap.
+                bool bExistingChord = false;
+                for (std::vector<ChordDetails>::iterator it = vChordDetails.begin(); it < vChordDetails.end(); it++)
+            	{
+                    if (nStart >= it->nStart && nStart < it->nEnd)
+                    {
+                        // Yes, it does, so add this note to the chord
+                        bExistingChord = true;
+                        it->vNoteNumber.push_back (vNoteEvents[iEvent].nNoteNum);
+
+                        if (chordLengthType == 1)
+                        {
+                            // Maximize
+                            if (nEnd > it->nEnd)
+                                it->nEnd = nEnd;
+                        }
+                        else if (chordLengthType == 2)
+                        {
+                            // Minimize
+                            it->nStart = nStart;
+                            if (nEnd < it->nEnd)
+                                it->nEnd = nEnd;
+                        }
+
+                        break;
+                    }
+                }
+
+                if (!bExistingChord)
+                    vChordDetails.push_back (ChordDetails (nStart, nEnd, vNoteEvents[i].nNoteNum));
+
+                break;
+            }
+        }
+
+        iEvent++;
+    };
+
+    // Output the chords in SMFFTI format.
+	if (!bOverwriteOutFile && akl::MyFileExists (outFile))
+	{
+		std::ostringstream ss;
+		ss << "Output file already exists. Use the -o switch to append to this file, eg:\n"
+			<< "SMFFTI.exe -m mymidi.mid mymidi.txt -o";
+		_sStatusMessage = ss.str();
+		return StatusCode::OutputFileAlreadyExists;
+	}
+
+	std::vector<std::string> vOutFile;
+
+	// Load existing content of output file if it exists.
+	if (akl::MyFileExists (outFile))
+		akl::LoadTextFileIntoVector (outFile, vOutFile);
+
+	// Shift all notes down to relative semitone intervals,
+	// eg. From "60, 63, 67" to "0, 3, 7". This is how we identify chord types.
+	auto SetChordIntervals = [](std::vector<uint16_t>& vNoteIntervals)
+    {
+		uint16_t nLowestNote = vNoteIntervals[0];
+		for (uint16_t i = 0; i < vNoteIntervals.size(); i++)
+			vNoteIntervals[i] -= nLowestNote;
+    };
+
+	std::vector<char> vOutStrChordPos;
+	std::vector<std::string> vChordName;
+	uint32_t n32ndPos = 0;
+
+	// Loop through chords in the progression.
+    for each (auto c in vChordDetails)
+    {
+		// Sort the notes from lowest to highest.
+		// vNoteIntervals is used to identify the chord TYPE.
+		std::vector<uint16_t> vNoteIntervals (c.vNoteNumber);
+		std::sort (vNoteIntervals.begin(), vNoteIntervals.end());
+
+		// Second copy of notes vector which is used to identify the chord NAME.
+		std::vector<uint16_t> vNotes2 (vNoteIntervals);
+
+		SetChordIntervals (vNoteIntervals);
+
+		// Is the first note a bass note? If so, we don't need
+		// it, so remove it.
+		for (uint16_t i = 1; i < vNoteIntervals.size(); i++)
+		{
+			if (vNoteIntervals[i] == 12)
+			{
+				// This is the same note an octave higher,
+				// so delete the bass note; and shift everything
+				// down again so that lowest note (which may not be
+				// root) is assigned zero.
+				vNoteIntervals.erase (vNoteIntervals.begin());
+				SetChordIntervals (vNoteIntervals);
+				break;
+			}
+		}
+
+		// Check if the notes, in their current order, match a chord type...
+		std::string sChordType;
+		bool bMinor;
+		for (int i = 0; i < 10; i++)	// max 10 attempt, easily plenty
+		{
+			sChordType = IsValidChordType (vNoteIntervals, bMinor);
+			if (sChordType.length())
+				break;
+
+			// No match yet, so transpose the lowest note up and octave and try again.
+			vNoteIntervals[0] += 12;
+			std::sort (vNoteIntervals.begin(), vNoteIntervals.end());
+			SetChordIntervals (vNoteIntervals);
+			vNotes2.push_back (vNotes2[0] + 12);
+			vNotes2.erase (vNotes2.begin());
+		}
+
+		if (sChordType.length() == 0)
+		{
+			// Abort
+			std::ostringstream ss;
+			ss << "Invalid chord in MIDI file: Chord no. " << vChordName.size() + 1;
+			_sStatusMessage = ss.str();
+			return StatusCode::InvalidChordInMidiFile;
+		}
+
+		// Hack: We don't need "maj" appearing for major chords.
+		if (sChordType == "maj")
+			sChordType = "";
+
+		// Identify the name of the chord.
+		uint16_t nRoot = (vNotes2[0] % 12);
+		std::string sRoot;
+		for (const auto& pair : _mChromaticScale2)
+		{
+			if (nRoot == pair.second)
+			{
+				sRoot = pair.first;
+				break;
+			}
+		}
+		//std::string sChordName = sRoot + (bMinor ? "m" : "");
+		std::string sChordName = sRoot + sChordType;
+
+
+		// Now append chord position/name to output strings.
+		// Each character in the output string represents a 1/32nd note.
+		//
+		// First, go to where the chord begins.
+        while (n32ndPos < c.nStart)
+        {
+			vOutStrChordPos.push_back (' ');
+            n32ndPos++;
+        }
+		//
+		// Output chord length.
+        uint32_t nLen = c.nEnd - c.nStart;
+        for (uint32_t i = 0; i < nLen; i++)
+        {
+   			vOutStrChordPos.push_back (i == 0 ? '+' : '#');
+            n32ndPos++;
+        }
+		//
+		// Save chord name
+		vChordName.push_back (sChordName);
+
+    };
+
+	std::string sRuler = "$ . . . | . . . | . . . | . . . $ . . . | . . . | . . . | . . . ";
+	sRuler += sRuler;
+	//std::string sRuler = "$ . . . | . . . | . . . | . . . $ . . . | . . . | . . . | . . . ";
+	//std::string sRuler = "$ . . . | . . . | . . . | . . . ";
+	//std::string sRuler = "$ . . . | . . . ";
+	uint32_t nRulerLen = sRuler.length();
+
+	auto PadCharVector = [](std::vector<char>& vCh, uint32_t nBufLen)
+    {
+		// vCh is the vector to be padded out.
+		// nBufLen is a length, eg. 32, such that the vector will be padded
+		// to the next multiple of nBufLen.
+		uint32_t nLen = vCh.size();
+		uint32_t nLen2 = (((nLen - 1) / nBufLen) + 1) * nBufLen;
+		uint32_t nPad = nLen2 - nLen;
+		for (uint32_t i = 0; i < nPad; i++)
+			vCh.push_back (' ');
+    };
+
+	// Pad the output strings with spaces to give them a 
+	// length corresponding to a multiple of the ruler length.
+	PadCharVector (vOutStrChordPos, nRulerLen);
+
+	auto CountOccurrences = [](const std::string& str, const std::string& target)
+	{
+		uint32_t count = 0;
+		uint32_t pos = 0;
+		while ((pos = str.find(target, pos)) != std::string::npos)
+		{
+			count++;
+			pos += target.length();
+		}
+		return count;
+	};
+
+	uint32_t n32ndCount = n32ndPos;
+	n32ndPos = 0;
+	std::string vLine;
+	uint32_t iChord = 0;
+	while (n32ndPos < n32ndCount)
+	{
+		vOutFile.push_back (sRuler);
+
+		vLine = std::string (vOutStrChordPos.begin() + n32ndPos, vOutStrChordPos.begin() + n32ndPos + nRulerLen);
+		vOutFile.push_back (vLine);
+
+		// Output chord names appearing in this line.
+		uint32_t nPlusCount = CountOccurrences (vLine, "+"); // No. chords appearing in this line.
+		vLine.clear();
+		std::string sComma = "";
+		for (uint32_t i = 0; i < nPlusCount; i++)
+		{
+			vLine += sComma + vChordName[iChord++];
+			sComma = ", ";
+		}
+		vOutFile.push_back (vLine);
+
+		n32ndPos += nRulerLen;
+	}
+
+	akl::WriteVectorToTextFile (outFile, vOutFile);
+	return nRes;
+}
+
+std::string CMIDIHandler::IsValidChordType (const std::vector<uint16_t>& vNotes, bool& bMinor)
+{
+	std::string sChordType = "";
+	bMinor = false;
+
+	std::string comma = "";
+	std::ostringstream ss;
+	for (uint16_t i = 1; i < vNotes.size(); i++)
+	{
+		ss << comma << vNotes[i];
+		comma = ",";
+	}
+	std::string sIntervals = ss.str();
+
+	for (const auto& pair : _mChordTypes)
+	{
+		if (sIntervals == pair.second)
+		{
+			sChordType = pair.first;
+
+			if (sIntervals[0] == '3')
+				bMinor = true;
+
+			break;
+		}
+    }
+
+	return sChordType;
+}
+
+
 CMIDIHandler::StatusCode CMIDIHandler::GenRandMelodies (std::string filename, bool bOverwriteOutFile)
 {
 	StatusCode nRes = StatusCode::Success;
@@ -2911,11 +3460,12 @@ std::string CMIDIHandler::GetStatusMessage()
 //-----------------------------------------------------------------------------
 // Static class members
 
-std::string CMIDIHandler::_version = "0.43";
+std::string CMIDIHandler::_version = "0.44";
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
 std::map<std::string, std::vector<uint8_t>>CMIDIHandler::_mMelodyNotes;
 std::map<std::string, uint8_t>CMIDIHandler::_mChromaticScale;
+std::map<std::string, uint8_t>CMIDIHandler::_mChromaticScale2;
 std::vector<std::string>CMIDIHandler::_vRFGChords;
 
 CMIDIHandler::ClassMemberInit CMIDIHandler::cmi;
@@ -2937,9 +3487,9 @@ CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 	_mChordTypes.insert (std::pair<std::string, std::string>("sus4",	"5,7"));
 	_mChordTypes.insert (std::pair<std::string, std::string>("7sus4",   "5,7,10"));
 	_mChordTypes.insert (std::pair<std::string, std::string>("5",       "7"));				// Power chord
-	_mChordTypes.insert (std::pair<std::string, std::string>("dim",		"3, 6"));			// Diminished
-	_mChordTypes.insert (std::pair<std::string, std::string>("dim7",	"3, 6, 9"));		// Diminished 7th
-	_mChordTypes.insert (std::pair<std::string, std::string>("m7b5",	"3, 6, 10"));		// Half-Diminished 7th
+	_mChordTypes.insert (std::pair<std::string, std::string>("dim",		"3,6"));			// Diminished
+	_mChordTypes.insert (std::pair<std::string, std::string>("dim7",	"3,6,9"));		// Diminished 7th
+	_mChordTypes.insert (std::pair<std::string, std::string>("m7b5",	"3,6,10"));		// Half-Diminished 7th
 
 	// Auto-Melody: Semitone positions of all the notes available.
 	// (The +AutoMelodyUsePentatonic parameter allows you to expand the notes in the major and minor
@@ -2994,6 +3544,20 @@ CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("A#", 10));
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("Bb", 10));
 	_mChromaticScale.insert (std::pair<std::string, uint8_t>("B", 11));
+
+	// Just the flat annotation, which I prefer.
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("C", 0));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("Db", 1));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("D", 2));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("Eb", 3));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("E", 4));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("F", 5));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("Gb", 6));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("G", 7));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("Ab", 8));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("A", 9));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("Bb", 10));
+	_mChromaticScale2.insert (std::pair<std::string, uint8_t>("B", 11));
 
 	// Weighted to favour certain chords.
 	//
