@@ -1524,6 +1524,15 @@ CMIDIHandler::StatusCode CMIDIHandler::ConvertMIDIToSMFFTI (std::string inFile, 
         ifs.read ((char*)&n16, 2);
         uint16_t nFileFormat = Swap16 (n16);
 
+		// Only single track files allowed.
+		if (nFileFormat != 0)
+		{
+			std::ostringstream ss;
+			ss << "MIDI file invalid for this operation. Only single-track MIDI files can be used.";
+			_sStatusMessage = ss.str();
+			return StatusCode::InvalidMIDIFile;
+		}
+
         ifs.read ((char*)&n16, 2);
         nNumberTracks = Swap16 (n16);
 
@@ -1849,11 +1858,14 @@ CMIDIHandler::StatusCode CMIDIHandler::ConvertMIDIToSMFFTI (std::string inFile, 
 
     };
 
-	std::string sRuler = "$ . . . | . . . | . . . | . . . $ . . . | . . . | . . . | . . . ";
-	sRuler += sRuler;
-	//std::string sRuler = "$ . . . | . . . | . . . | . . . $ . . . | . . . | . . . | . . . ";
-	//std::string sRuler = "$ . . . | . . . | . . . | . . . ";
-	//std::string sRuler = "$ . . . | . . . ";
+	// Any progression longer than 2 bars will be split into 4-bar sections.
+	size_t nChordPosLen = vOutStrChordPos.size();
+	std::string sRuler = "$ . . . | . . . | . . . | . . . ";
+	if (nChordPosLen > 32)
+		sRuler += sRuler;
+	if (nChordPosLen > 64)
+		sRuler += sRuler;
+
 	uint32_t nRulerLen = sRuler.length();
 
 	auto PadCharVector = [](std::vector<char>& vCh, uint32_t nBufLen)
@@ -1890,6 +1902,7 @@ CMIDIHandler::StatusCode CMIDIHandler::ConvertMIDIToSMFFTI (std::string inFile, 
 	uint32_t iChord = 0;
 	while (n32ndPos < n32ndCount)
 	{
+		vOutFile.push_back ("");
 		vOutFile.push_back (sRuler);
 
 		vLine = std::string (vOutStrChordPos.begin() + n32ndPos, vOutStrChordPos.begin() + n32ndPos + nRulerLen);

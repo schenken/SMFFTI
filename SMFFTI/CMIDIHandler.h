@@ -125,7 +125,8 @@ public:
 		InvalidWriteOldRuler,
 		InvalidAutoMelodyDontUsePentatonic,
 		InvalidModalInterchangeChancePercentage,
-		InvalidChordInMidiFile
+		InvalidChordInMidiFile,
+		InvalidMIDIFile
 	};
 
 	CMIDIHandler (std::string sInputFile);
