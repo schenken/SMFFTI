@@ -384,7 +384,7 @@ private:
 	static struct ClassMemberInit { ClassMemberInit(); } cmi;
 
 	static std::map<std::string, std::string>_mChordTypes;
-	
+
 	// For each chord type, list of notes from the scale (semitone values)
 	// that can be used for auto-melody.
 	static std::map<std::string, std::vector<uint8_t>> _mMelodyNotes;

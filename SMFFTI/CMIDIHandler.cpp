@@ -1748,9 +1748,9 @@ CMIDIHandler::StatusCode CMIDIHandler::ConvertMIDIToSMFFTI (std::string inFile, 
 	if (akl::MyFileExists (outFile))
 		akl::LoadTextFileIntoVector (outFile, vOutFile);
 
-	// Shift all notes down to relative semitone intervals,
-	// eg. From "60, 63, 67" to "0, 3, 7". This is how we identify chord types.
-	auto SetChordIntervals = [](std::vector<uint16_t>& vNoteIntervals)
+	// Convert notes to relative note intervals.
+	// eg. From "60, 63, 67" to "0, 3, 7".
+	auto SetNoteZeroOffset = [](std::vector<uint16_t>& vNoteIntervals)
     {
 		uint16_t nLowestNote = vNoteIntervals[0];
 		for (uint16_t i = 0; i < vNoteIntervals.size(); i++)
@@ -1761,50 +1761,63 @@ CMIDIHandler::StatusCode CMIDIHandler::ConvertMIDIToSMFFTI (std::string inFile, 
 	std::vector<std::string> vChordName;
 	uint32_t n32ndPos = 0;
 
+	// For the sake of identifying chord types, we need to ensure
+	// all notes are contained within a single octave, so here we
+	// do some necessary downward transposing.
+	_mChordTypes["9"] = "2,4,7,10";
+	_mChordTypes["maj9"] = "2,4,7,11";
+	_mChordTypes["add9"] = "2,4,7";
+	_mChordTypes["m9"] = "2,3,7,10";
+	_mChordTypes["madd9"] = "2,3,7";
+
 	// Loop through chords in the progression.
     for each (auto c in vChordDetails)
     {
 		// Sort the notes from lowest to highest.
-		// vNoteIntervals is used to identify the chord TYPE.
-		std::vector<uint16_t> vNoteIntervals (c.vNoteNumber);
-		std::sort (vNoteIntervals.begin(), vNoteIntervals.end());
+		// vNotes is used to identify the chord TYPE.
+		std::vector<uint16_t> vNotes (c.vNoteNumber);
+		std::sort (vNotes.begin(), vNotes.end());
+
+		// Remove all duplicate notes, ie. same note one or more octaves higher.
+		uint16_t iStartNote = 0;
+		while (iStartNote < vNotes.size() - 1)
+		{
+			bool bDuplicate = false;
+			uint16_t n1 = vNotes[iStartNote] % 12;
+			for (uint16_t i = iStartNote + 1; i < vNotes.size(); i++)
+			{
+				uint16_t n2 = vNotes[i] % 12;
+				if (n1 == n2)
+				{
+					vNotes.erase (vNotes.begin() + iStartNote);
+					bDuplicate = true;
+					break;
+				}
+			}
+
+			if (!bDuplicate)
+				iStartNote++;
+		}
 
 		// Second copy of notes vector which is used to identify the chord NAME.
-		std::vector<uint16_t> vNotes2 (vNoteIntervals);
-
-		SetChordIntervals (vNoteIntervals);
-
-		// Is the first note a bass note? If so, we don't need
-		// it, so remove it.
-		for (uint16_t i = 1; i < vNoteIntervals.size(); i++)
-		{
-			if (vNoteIntervals[i] == 12)
-			{
-				// This is the same note an octave higher,
-				// so delete the bass note; and shift everything
-				// down again so that lowest note (which may not be
-				// root) is assigned zero.
-				vNoteIntervals.erase (vNoteIntervals.begin());
-				SetChordIntervals (vNoteIntervals);
-				break;
-			}
-		}
+		std::vector<uint16_t> vNotes2 (vNotes);
 
 		// Check if the notes, in their current order, match a chord type...
 		std::string sChordType;
 		bool bMinor;
 		for (int i = 0; i < 10; i++)	// max 10 attempt, easily plenty
 		{
-			sChordType = IsValidChordType (vNoteIntervals, bMinor);
+			SetNoteZeroOffset (vNotes);
+			sChordType = IsValidChordType (vNotes, bMinor);
 			if (sChordType.length())
 				break;
 
-			// No match yet, so transpose the lowest note up and octave and try again.
-			vNoteIntervals[0] += 12;
-			std::sort (vNoteIntervals.begin(), vNoteIntervals.end());
-			SetChordIntervals (vNoteIntervals);
+			// No match yet, so transpose the lowest note up an octave and try again.
+			vNotes[0] += 12;
+			std::sort (vNotes.begin(), vNotes.end());
 			vNotes2.push_back (vNotes2[0] + 12);
 			vNotes2.erase (vNotes2.begin());
+			std::sort (vNotes2.begin(), vNotes2.end());
 		}
 
 		if (sChordType.length() == 0)
@@ -1831,7 +1844,6 @@ CMIDIHandler::StatusCode CMIDIHandler::ConvertMIDIToSMFFTI (std::string inFile, 
 				break;
 			}
 		}
-		//std::string sChordName = sRoot + (bMinor ? "m" : "");
 		std::string sChordName = sRoot + sChordType;
 
 
