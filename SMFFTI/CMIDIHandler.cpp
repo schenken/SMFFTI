@@ -393,7 +393,13 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			// RCR
 			if (nReplaceCount)
 			{
-				_vInputCopy.insert (_vInputCopy.begin() + nRCRIndex + 1, sChordList);
+				// 230814 Bug fix: Chord progressions amended by RCR are now saved (to
+				// the source file) in reverse order, ie. the latest at the top.
+				// By having the the 'active' chord progression where it, ideally, should
+				// be, ie. immediately below the note positions line, we prevent a cock-up
+				// when the output file is used as input to generate the MIDI file.
+				//_vInputCopy.insert (_vInputCopy.begin() + nRCRIndex + 1, sChordList);
+				_vInputCopy.insert (_vInputCopy.begin() + nRCRIndex, sChordList);
 				nRCRLineOffset++;
 			}
 
@@ -1912,6 +1918,11 @@ CMIDIHandler::StatusCode CMIDIHandler::ConvertMIDIToSMFFTI (std::string inFile, 
 	n32ndPos = 0;
 	std::string vLine;
 	uint32_t iChord = 0;
+
+	//std::string sTime = akl::TimeStamp();
+	//vOutFile.push_back ("\n------------------------------------------------");
+	//vOutFile.push_back ("# Timestamp: " + sTime);
+
 	while (n32ndPos < n32ndCount)
 	{
 		vOutFile.push_back ("");
