@@ -42,6 +42,12 @@
     <ClInclude Include="CAutoRhythm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CConsoleUI.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CMyUI.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="SMFFTI.cpp">
@@ -60,6 +66,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="CAutoRhythm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CConsoleUI.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CMyUI.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -159,6 +159,9 @@ public:
 
 	static std::string _version;
 
+	static std::map<std::string, uint8_t>& GetChromaticScale() { return _mChromaticScale; }
+	bool GetChordIntervals (std::string sChordName, uint8_t& nRoot, std::vector<std::string>& vChordIntervals, std::string& sChordType);
+
 private:
 	std::string GetRandomGroove (bool& bRandomGroove);
 	void GenerateNoteEvents();
@@ -170,8 +173,6 @@ private:
 
 	void AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSeq, std::string chordName, bool& bNoteOn, uint32_t nEventTime);
 	int8_t NoteToMidi (std::string sNote, uint8_t& nNote, uint8_t& nSharpFlat);
-
-	bool GetChordIntervals (std::string sChordName, uint8_t& nRoot, std::vector<std::string>& vChordIntervals, std::string& sChordType);
 
 	StatusCode InitMidiFile (std::ofstream& ofs, const std::string& filename, bool bOverwriteOutFile);
 	void FinishMidiFile (std::ofstream& ofs);

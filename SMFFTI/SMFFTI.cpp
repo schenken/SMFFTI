@@ -66,6 +66,14 @@ void DoStuff (int argc, char* argv[])
         return;
     }
 
+    // T2P7E7 Wizard mode
+    if (std::string (argv[1]) == "-w")
+    {
+        CMyUI myUI;
+        myUI.Run();
+        return;
+    }
+
     if (argc < 3)
     {
         MessageBeep (MB_ICONERROR);
@@ -284,6 +292,10 @@ void PrintUsage()
         "Usage 6 - Generate SMFFTI command lines from MIDI file:\n\n"
 
         "    SMFFTI.exe -m <infile> <outfile>\n\n"
+
+        "Usage 7 - Command File Wizard:\n\n"
+
+        "    SMFFTI.exe -w\n\n"
 
         "Consult the manual for more information on all the above operations.\n\n"
         ;

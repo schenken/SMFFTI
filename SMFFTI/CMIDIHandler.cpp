@@ -1056,7 +1056,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 
 	if (_vChordNames.size() == 0)
 	{
-		_sStatusMessage = "No chords specified - output file will not be produced.";
+		_sStatusMessage = "No valid chords specified.";
 		return StatusCode::NoChordsSpecified;
 	}
 
@@ -1307,7 +1307,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoRhythm (std::string filen
 	return nRes;
 }
 
-// 2303090953 Auto-Chords: Generate copy of original command file, complete with 4-bar sequence
+// 2303090953 Auto-Chords: Generate copy of original command file, complete with sequence
 // of randomized chords and note lengths.
 CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filename, bool bOverwriteOutFile)
 {

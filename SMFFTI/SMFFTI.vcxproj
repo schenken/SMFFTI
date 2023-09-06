@@ -151,7 +151,9 @@
   <ItemGroup>
     <ClInclude Include="CAutoRhythm.h" />
     <ClInclude Include="CChordBank.h" />
+    <ClInclude Include="CConsoleUI.h" />
     <ClInclude Include="CMIDIHandler.h" />
+    <ClInclude Include="CMyUI.h" />
     <ClInclude Include="Common.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
@@ -162,7 +164,9 @@
   <ItemGroup>
     <ClCompile Include="CAutoRhythm.cpp" />
     <ClCompile Include="CChordBank.cpp" />
+    <ClCompile Include="CConsoleUI.cpp" />
     <ClCompile Include="CMIDIHandler.cpp" />
+    <ClCompile Include="CMyUI.cpp" />
     <ClCompile Include="Common.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>

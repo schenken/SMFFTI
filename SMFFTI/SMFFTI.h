@@ -4,11 +4,13 @@
 
 SMFFTI - Simple MIDI Files From Text Input
 
-See the User Guide for everything you need to know about using it.
+See the User Manual for everything you need to know about using it.
 
-v0.44	July 14, 2023
+v0.44	September 6, 2023
 T2O4GU Facility to read MIDI file and convert chord data to SMFFTI command-line
 format (ConvertMIDIToSMFFTI).
+T2P7E7 SMFFTI Command File Wizard. Console UI handling, implemented to provide
+easy generation of basic SMFFTI command file.
 
 v0.43	July 11, 2023
 T2015A For both Auto-Chords (-ac mode) and Random Chord Replacement (RCR), it is
@@ -47,13 +49,14 @@ suspended/diminished chords, pentatonic notes are NOT used, but biasing is appli
 v0.2	July 30, 2022
 Features added to the initial version: (1) Auto-Rhythm (-ar) mode to create randomized rhythms.
 (2) +AutoMelody command parameter to generate randomized melody. (3) Generate Randomized Melodies
-(-grm) mode to create a bunch of randomized melodies. (4) "M:" melody lines in commend files for 
+(-grm) mode to create a bunch of randomized melodies. (4) "M:" melody lines in command files for 
 specifying fixed melodies.
 
 
 */
 #include "resource.h"
 #include "CMIDIHandler.h"
+#include "CMyUI.h"
 
 void DoStuff (int argc, char* argv[]);
 
