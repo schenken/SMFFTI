@@ -51,6 +51,11 @@ int main (int argc, char* argv[])
 
 void DoStuff (int argc, char* argv[])
 {
+    std::vector<std::string> vArgs;
+    for (int i = 0; i < argc; ++i) {
+        vArgs.push_back (argv[i]);
+    }
+
     if (argc < 2)
     {
         MessageBeep (MB_ICONERROR);
@@ -73,6 +78,61 @@ void DoStuff (int argc, char* argv[])
         myUI.Run();
         return;
     }
+
+    // T2RQLW Set Parameter From Command Line
+    if (vArgs[1] == "-p")
+    {
+        if (vArgs.size() != 4)
+        {
+            std::ostringstream ss;
+            ss << "Command specified incorrectly. The Set Parameter command should\n"
+                << "have 4 arguments, eg.:\n"
+                << "\n"
+                << "    SMFFTI.exe -p \"+AutoMelody = 1\" mymidi.txt\n"
+                << "\n"
+                ;
+            PrintError (ss.str());
+            return;
+        }
+
+        std::string sInFile (vArgs[3]);
+
+        std::unique_ptr<CMIDIHandler> pMidiH = std::make_unique<CMIDIHandler> (sInFile);
+        if (pMidiH->VerifyFile() != CMIDIHandler::StatusCode::Success)
+        {
+            PrintError (pMidiH->GetStatusMessage());
+            return;
+        }
+
+        std::vector<std::string>& vFile = pMidiH->GetFileVec();
+
+        if (pMidiH->SetParameter (vFile, vArgs[2]) != CMIDIHandler::StatusCode::Success)
+        {
+            PrintError (pMidiH->GetStatusMessage());
+            return;
+        }
+
+        // Get reference to update file content vector.
+        // (SetParameter only updates the file vector, and does NOT write to file.)
+        //const std::vector<std::string>& vFile = pMidiH->GetFileVec();
+
+        // Validate the updated content. Bit hacky here, but we make a new 
+        // instance of CMIDIHandler to do this, in order for the verify process
+        // to begin with everything initialised. Purists: Don't fret it - it's
+        // not missile guidance software!
+        pMidiH.reset();
+        pMidiH = std::make_unique<CMIDIHandler> ("");
+        if (pMidiH->VerifyMemFile (vFile) != CMIDIHandler::StatusCode::Success)
+        {
+            PrintError (pMidiH->GetStatusMessage());
+            return;
+        }
+
+    	akl::WriteVectorToTextFile (sInFile, vFile);
+
+        return;
+     }
+
 
     if (argc < 3)
     {
@@ -110,7 +170,7 @@ void DoStuff (int argc, char* argv[])
 
     int8_t iInFile = 1, iOutFile = 2;
 
-    // Auto Rhythm: Create modified version of commend file
+    // Auto Rhythm: Create modified version of command file
     // to contain a rhythm (which is not connected with the
     // funk groove concept).
     bool bAutoRhythm = false;
@@ -222,7 +282,7 @@ void DoStuff (int argc, char* argv[])
         return;
     }
 
-    if (midiH.Verify() != CMIDIHandler::StatusCode::Success)
+    if (midiH.VerifyFile() != CMIDIHandler::StatusCode::Success)
     {
         PrintError (midiH.GetStatusMessage());
         return;
@@ -263,24 +323,24 @@ void PrintUsage()
 
         "    SMFFTI.exe <infile> <outfile>\n\n"
 
-        "where <infile> is a text file containing instructions and directives\n"
+        "where <infile> is a SMFFTI command file containing a chord progression and parameters\n"
         "and <outfile> is the name of the MIDI file (.mid) to create.\n\n"
 
-        "Usage 2 - Generate Random Funk Groove text command file:\n\n"
+        "Usage 2 - Generate Random Funk Groove SMFFTI command file:\n\n"
 
         "    SMFFTI.exe -rfg <outfile>\n\n"
 
-        "where <outfile> is the name of the text command file.\n\n"
+        "where <outfile> is the name of the SMFFTI command file.\n\n"
 
-        "Usage 3 - Generate modified text command file containing a randomized rhythm pattern:\n\n"
+        "Usage 3 - Generate modified SMFFTI command file containing a randomized rhythm pattern:\n\n"
 
         "    SMFFTI.exe -ar <infile> <outfile>\n\n"
 
-        "where <infile> is a text file containing instructions and directives\n"
+        "where <infile> is a SMFFTI command file containing a chord progression and parameters\n"
         "and <outfile> is the name of a modified version of <infile> that \n"
         "contains an automatically-generated rhythm.\n\n"
 
-        "Usage 4 - Generate modified text command file containing a randomized chord\n"
+        "Usage 4 - Generate modified SMFFTI command file containing a randomized chord\n"
         "progression along with a randomized rhythm pattern:\n\n"
 
         "    SMFFTI.exe -ac <infile> <outfile>\n\n"
@@ -289,11 +349,18 @@ void PrintUsage()
 
         "    SMFFTI.exe -grm <outfile>\n\n"
 
-        "Usage 6 - Generate SMFFTI command lines from MIDI file:\n\n"
+        "Usage 6 - Generate SMFFTI-format chord progression data from a MIDI file:\n\n"
 
         "    SMFFTI.exe -m <infile> <outfile>\n\n"
 
-        "Usage 7 - Command File Wizard:\n\n"
+        "where <infile> is a MIDI file and <outfile> is an existing SMFFTI command file\n"
+        "to be updated, or a plain text file.\n\n"
+
+        "Usage 7 - Set a parameter in a SMFFTI command file:\n\n"
+
+        "    SMFFTI.exe -p \"<parameter>\" <infile>\n\n"
+
+        "Usage 8 - Command File Wizard:\n\n"
 
         "    SMFFTI.exe -w\n\n"
 

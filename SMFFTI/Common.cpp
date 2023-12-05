@@ -8,6 +8,7 @@ size_t LoadTextFileIntoVector(const std::string& filename, std::vector<std::stri
     std::ifstream f;
     f.open(filename.c_str());
     std::string line;
+	v.clear();
     while (getline(f, line))
     {
         v.push_back(line);

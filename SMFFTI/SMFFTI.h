@@ -6,6 +6,26 @@ SMFFTI - Simple MIDI Files From Text Input
 
 See the User Manual for everything you need to know about using it.
 
+v0.45	December 5, 2023
+(1) Allow text on same line after comment block start, eg. "(# hello"; similarly 
+allow text before comment block end, eg. "goodbye #)".
+(2) Fix: +AutoChordsMinorChordBias and +AutoChordsMinorChordBias were not 
+actually working! _vAutoChordsMinorChordBias & _vAutoChordsMajorChordBias 
+needed to be cleared if you specify custom values in your command file.
+(3) Modified a few parameter default values.
+(4) Set Parameter (-p) feature.
+(5) Demarcation of parameter data and music data. That is, music data (ie. chord
+progression info) must come at the END of the file.
+(6) Fix to +AllMelodyNotes: When set, +AutoMelody, +RandNoteStartOffet and
++RandNoteEndOffset all disabled.
+(7) Fix to +TransposeThreshold: The root note also transposed down, and transposition
+also occurs when +AutoMelody is set.
+(8) RCR Change: Now it checks when chosen chords have been tried (and rejected)
+using the history lines. To make this work, also implemented concept of "state"
+values that can be updated in the SMFFTI command file. These are known as
+System Parameters (eg. +SYS_RCRHistoryCount) and are not intended to be manually
+updated by the user.
+
 v0.44	September 6, 2023
 T2O4GU Facility to read MIDI file and convert chord data to SMFFTI command-line
 format (ConvertMIDIToSMFFTI).

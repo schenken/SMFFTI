@@ -20,10 +20,10 @@ void CMyUI::InitUI ()
 
 	// Form
 	formCreateSMFFTIFile.AddTextPrompt ((uint32_t)FormCreateSMFFTIFile::FormTitle, "Create SMFFTI Command File", 0, 256, "");	// First field is the title.
-	formCreateSMFFTIFile.AddTextPrompt ((uint32_t)FormCreateSMFFTIFile::Filename, "Name of output file", 5, 256, "mySMFFTIFile.txt");
+	formCreateSMFFTIFile.AddTextPrompt ((uint32_t)FormCreateSMFFTIFile::Filename, "Name of output file", 5, 256, "scf.txt");
 	formCreateSMFFTIFile.AddYNPrompt ((uint32_t)FormCreateSMFFTIFile::Overwrite, "Overwrite file if it already exists", "N");
 	formCreateSMFFTIFile.AddTextPrompt ((uint32_t)FormCreateSMFFTIFile::ChordProgession, "Chord progression", 1, 100, "C, Am, F, G");
-	formCreateSMFFTIFile.AddYNPrompt ((uint32_t)FormCreateSMFFTIFile::ExtraBassNote, "Extra bass note", "Y");
+	formCreateSMFFTIFile.AddYNPrompt ((uint32_t)FormCreateSMFFTIFile::ExtraBassNote, "Extra bass note", "N");
 	formCreateSMFFTIFile.AddYNPrompt ((uint32_t)FormCreateSMFFTIFile::RandVel, "Randomized velocity", "Y");
 	formCreateSMFFTIFile.AddYNPrompt ((uint32_t)FormCreateSMFFTIFile::OffsetNotePos, "Offset note positions", "Y");
 	formCreateSMFFTIFile.FormCompletedPrompt ((uint32_t)FormCreateSMFFTIFile::ReadyToAction, "Are you ready to create the file");
@@ -75,7 +75,7 @@ void CMyUI::CreateSMFFTIFile()
 
     "# SMFFTI Command File: " << sOutFile << "\n\n"
 
-	"+TrackName=My Test MIDI Sequence\n\n"
+	"+TrackName=SMFFTI\n\n"
 
 	"+BassNote=" << sParam_BassNote << "\n"
 	"+RootNoteOnly=0\n\n"
@@ -90,47 +90,50 @@ void CMyUI::CreateSMFFTIFile()
 	"+RandNoteEndOffset=" << sParam_NotePosOffsetAmt << "\n"
 	"+RandNoteOffsetTrim=1\n\n"
 
-	"#+AutoMelody=1\n"
-	"+AutoRhythmNoteLenBias=0, 0, 4, 8, 4, 1\n"
+	"+AutoMelody=0\n"
+	"+AutoRhythmNoteLenBias=0, 0, 4, 8, 4, 2\n"
 	"+AutoRhythmGapLenBias=0, 0, 0, 4, 8, 1\n"
 	"+AutoRhythmConsecutiveNoteChancePercentage=25\n\n"
 
-	"(#\n"
+	//"(# This comment block shows the default values that are used - \n"
+	//"you can uncomment this block and adjust the values.\n"
+	//"#\n"
 	"# Parameters relating to Auto-Chords (-ac) feature.\n"
 	"#\n"
 	"+AutoChordsNumBars=4\n"
-	"+AutoChordsMinorChordBias=32, 32, 32\n"
-	"+AutoChordsMajorChordBias=32, 32, 32\n"
-	"+AutoChordsShortNoteBiasPercent=66\n"
+	"+AutoChordsMinorChordBias=22, 42, 32\n"
+	"+AutoChordsMajorChordBias=22, 42, 32\n"
+	"+AutoChordsShortNoteBiasPercent=35\n"
 	"#\n"
 	"# Chance of Chord Type Variations (CTV) for Major chords.\n"
 	"# Note that you can specify a chance of suspended chords\n"
 	"# replacing a major chord.\n"
 	"#\n"
 	"+AutoChords_CTV_maj     = 1000\n"
-	"+AutoChords_CTV_7       =  100\n"
-	"+AutoChords_CTV_maj7    =  150\n"
-	"+AutoChords_CTV_9       =   50\n"
-	"+AutoChords_CTV_maj9    =   50\n"
-	"+AutoChords_CTV_add9    =  200\n"
-	"+AutoChords_CTV_sus2    =   15\n"
-	"+AutoChords_CTV_7sus2   =   15\n"
-	"+AutoChords_CTV_sus4    =   10\n"
-	"+AutoChords_CTV_7sus4   =   10\n"
+	"+AutoChords_CTV_7       = 100\n"
+	"+AutoChords_CTV_maj7    = 10\n"
+	"+AutoChords_CTV_9       = 10\n"
+	"+AutoChords_CTV_maj9    = 10\n"
+	"+AutoChords_CTV_add9    = 80\n"
+	"+AutoChords_CTV_sus2    = 15\n"
+	"+AutoChords_CTV_7sus2   = 15\n"
+	"+AutoChords_CTV_sus4    = 10\n"
+	"+AutoChords_CTV_7sus4   = 10\n"
 	"#\n"
 	"# Chance of Chord Type Variations (CTV) for Minor chords\n"
 	"+AutoChords_CTV_min     = 1000\n"
-	"+AutoChords_CTV_m7      =  250\n"
-	"+AutoChords_CTV_m9      =   50\n"
-	"+AutoChords_CTV_madd9   =  150\n"
+	"+AutoChords_CTV_m7      = 100\n"
+	"+AutoChords_CTV_m9      = 10\n"
+	"+AutoChords_CTV_madd9   = 10\n"
 	"#\n"
 	"+AutoChords_CTV_dim     = 0\n"
 	"+AutoChords_CTV_dim7    = 1\n"
 	"+AutoChords_CTV_m7b5    = 1\n"
-	"#)\n\n"
+	//"#)\n"
+	"\n"
 
-	"#+RandomChordReplacementKey = Gm\n"
-	"#+ModalInterchangeChancePercentage=10\n"
+	"+RandomChordReplacementKey = Gm\n"
+	"+ModalInterchangeChancePercentage = 0\n"
 
 	;
 
@@ -172,9 +175,9 @@ void CMyUI::CreateSMFFTIFile()
 	Sleep (1000);
 	std::cout << "completed." << std::endl;
 
-	// Check integrity of file and report fist error
+	// Check integrity of file and report error
 	CMIDIHandler midiH (sOutFile);
-    if (midiH.Verify() != CMIDIHandler::StatusCode::Success)
+    if (midiH.VerifyFile() != CMIDIHandler::StatusCode::Success)
     {
 	    //MessageBeep (MB_ICONERROR);
 		std::cout << "      Error! " << midiH.GetStatusMessage() << "\n\n";
@@ -218,7 +221,7 @@ void CMyUI::CreateMIDIFile()
 {
 	std::string sInFile = formCreateMIDIFile.vPrompts[(uint32_t)FormCreateMIDIFile::InputSMFFTIFile].sAnswer;
 	CMIDIHandler midiH (sInFile);
-	if (midiH.Verify() != CMIDIHandler::StatusCode::Success)
+	if (midiH.VerifyFile() != CMIDIHandler::StatusCode::Success)
 	{
 		std::cout << "\n      Error! " << midiH.GetStatusMessage() << "\n";
 		PressAnyKey();

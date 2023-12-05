@@ -63,6 +63,7 @@ public:
 	enum class StatusCode : uint16_t
 	{
 		Success,
+		InvalidInputFile,
 		ParameterValueMissing,
 		InvalidBassNoteValue,
 		InvalidRootNoteOnlyValue,
@@ -79,7 +80,7 @@ public:
 		InvalidArpeggiatorTimeValue,
 		InvalidArpeggiatorGatePercentValue,
 		InvalidArpeggiatorOctaveStepsValue,
-		UnrecognizedCommandFileParameter,
+		InvalidCommandFileParameter,
 		IllegalCharInNotePositionsLine,
 		BlankNotePositions,
 		FirstNonSpaceCharInNotePosLineMustBePlus,
@@ -126,14 +127,78 @@ public:
 		InvalidAutoMelodyDontUsePentatonic,
 		InvalidModalInterchangeChancePercentage,
 		InvalidChordInMidiFile,
-		InvalidMIDIFile
+		InvalidMIDIFile,
+		InvalidStartCommentBlock,
+		InvalidEndCommentBlock,
+		ParamAlreadySpecified,
+		IllegalParamAfterMusicData,
+		InvalidSYS_RCRHistoryCount,
+		NoMusicData
+	};
+
+	enum class ParamCode : uint16_t
+	{
+		AllMelodyNotes,
+		Arpeggiator,
+		ArpGatePercent,
+		ArpOctaveSteps,
+		ArpTime,
+		AutoChords_CTV_7,
+		AutoChords_CTV_7sus2,
+		AutoChords_CTV_7sus4,
+		AutoChords_CTV_9,
+		AutoChords_CTV_add9,
+		AutoChords_CTV_dim,
+		AutoChords_CTV_dim7,
+		AutoChords_CTV_m7,
+		AutoChords_CTV_m7b5,
+		AutoChords_CTV_m9,
+		AutoChords_CTV_madd9,
+		AutoChords_CTV_maj,
+		AutoChords_CTV_maj7,
+		AutoChords_CTV_maj9,
+		AutoChords_CTV_min,
+		AutoChords_CTV_sus2,
+		AutoChords_CTV_sus4,
+		AutoChordsMajorChordBias,
+		AutoChordsMinorChordBias,
+		AutoChordsNumBars,
+		AutoChordsShortNoteBiasPercent,
+		AutoMelody,
+		AutoMelodyDontUsePentatonic,
+		AutoRhythmConsecutiveNoteChancePercentage,
+		AutoRhythmGapLenBias,
+		AutoRhythmNoteLenBias,
+		BassNote,
+		FunkStrum,
+		FunkStrumUpStrokeAttenuation,
+		FunkStrumVelDeclineIncrement,
+		ModalInterchangeChancePercentage,
+		NoteStagger,
+		OctaveRegister,
+		RandNoteEndOffset,
+		RandNoteOffsetTrim,
+		RandNoteStartOffset,
+		RandomChordReplacementKey,
+		RandVelVariation,
+		RootNoteOnly,
+		TrackName,
+		TransposeThreshold,
+		Velocity,
+		WriteOldRuler,
+		SYS_RCRHistoryCount,
+		SYS_ParameterCount
 	};
 
 	CMIDIHandler (std::string sInputFile);
 
 	StatusCode CreateRandomFunkGrooveMIDICommandFile (std::string sOutFile, bool bOverwriteOutFile);
 
-	StatusCode Verify();	// Load command file and check content is valid.
+	// Validate the command file.
+	StatusCode VerifyFile();
+
+	// Validate memory (vector) instance of command file.
+	StatusCode VerifyMemFile (const std::vector<std::string>& vFile);
 
 	// Whack out a dead simple MIDI file. Single track with just a few notes.
 	StatusCode CreateMIDIFile (const std::string& filename, bool bOverwriteOutFile);
@@ -161,6 +226,13 @@ public:
 
 	static std::map<std::string, uint8_t>& GetChromaticScale() { return _mChromaticScale; }
 	bool GetChordIntervals (std::string sChordName, uint8_t& nRoot, std::vector<std::string>& vChordIntervals, std::string& sChordType);
+
+	// Set parameter inside a SMFFTI file. This is to facilitate batch
+	// command processing, eg. using a .bat file to execute multiple
+	// SMFFTI operations.
+	StatusCode SetParameter (std::vector<std::string>& vF, const std::string& sP);
+
+	std::vector<std::string> GetFileVec();
 
 private:
 	std::string GetRandomGroove (bool& bRandomGroove);
@@ -197,9 +269,11 @@ private:
 
 	// File with MIDI content directives.
 	std::string _sInputFile;
+	std::string _sOutputFile;
 
-	// Store MIDI input file content
-	std::vector<std::string> _vInput;
+	// Store MIDI input file content.
+	// This is written to by VerifyFile.
+	std::vector<std::string> _vFile;
 
 	std::vector<std::string> _vNotePositions;
 	std::vector<uint32_t> _vNotePosLineInFile;
@@ -313,7 +387,7 @@ private:
 	// number of 32nd, 16th, 8th, 1/4, 1/2 and whole notes, from
 	// left-to-right in the string.
 	// NB. *ALWAYS* specify at least ONE 32nd (the last in the list).
-	std::string _sAutoRhythmNoteLenBias = "0, 0, 4, 8, 4, 1";
+	std::string _sAutoRhythmNoteLenBias = "0, 0, 4, 8, 4, 2";
 	std::string _sAutoRhythmGapLenBias = "0, 0, 0, 4, 8, 1";
 	//
 	// Percentage chance of *consecutive* notes.
@@ -337,19 +411,19 @@ private:
 	// (i) root chord (2) other minor chords (3) major chords,
 	// respectively. If value less than 100, the remainder is
 	// alloted to diminished chords.
-	std::string _sAutoChordsMinorChordBias = "32, 32, 32";
+	std::string _sAutoChordsMinorChordBias = "22, 42, 32";
 	std::vector<uint8_t> _vAutoChordsMinorChordBias;
 
 	// Auto-chords: For *major* keys, percentage bias for
 	// (i) root chord (2) other major chords (3) minor chords,
 	// respectively. If value less than 100, the remainder is
 	// alloted to diminished chords.
-	std::string _sAutoChordsMajorChordBias = "32, 32, 32";
+	std::string _sAutoChordsMajorChordBias = "22, 42, 32";
 	std::vector<uint8_t> _vAutoChordsMajorChordBias;
 
 	// Auto-chords: Percentage to bias shorter notes.
 	// Zero means *no* short notes; 100 means *all* short notes.
-	uint8_t _nAutoChordsShortNoteBiasPercent = 66;
+	uint8_t _nAutoChordsShortNoteBiasPercent = 35;
 
 	// Auto-chords: Factors for specifying the chances of the
 	// various Chord Type Variations (CTV) occurring.
@@ -378,6 +452,14 @@ private:
 	uint8_t _nModalInterchangeChancePercentage = 0;
 	bool _bAutoChords = false;
 
+	uint32_t _nFirstRuler = 0;
+
+	uint32_t _nRCRHistoryCount = 0;
+
+	// Which parameters are specified in the command file.
+	// Vector stores line num of first occurrence of param.
+	std::vector<uint16_t> _vParamsUsed;
+
 	//---------------------------------------------------------------------
 	// Static class members
 
@@ -396,5 +478,7 @@ private:
 	static std::vector<std::string> _vRFGChords;
 
 	static std::default_random_engine _eng;
+
+	static std::map<ParamCode, std::string> _mParamCodes;
 };
 

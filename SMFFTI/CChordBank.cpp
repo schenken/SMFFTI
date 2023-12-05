@@ -31,6 +31,7 @@ void CChordBank::BuildMinor (uint8_t nRootPercent, uint8_t nOtherMinorPercent, u
 	{
 		_vChords.push_back (Chord (_vChromaticScale[_iChord], ChordType::Minor));
 		iChordCount++;
+		_nMinorKey_RootChord_Multiplier = 1;
 	}
 
 	// Other minor chords
@@ -42,6 +43,7 @@ void CChordBank::BuildMinor (uint8_t nRootPercent, uint8_t nOtherMinorPercent, u
 			_vChords.push_back (Chord (_vChromaticScale[_iChord + 7], ChordType::Minor));
 
 		iChordCount++;
+		_nMinorKey_TwoOtherMinorChords_Multiplier = 2;
 	}
 
 	// Major chords
@@ -55,6 +57,7 @@ void CChordBank::BuildMinor (uint8_t nRootPercent, uint8_t nOtherMinorPercent, u
 			_vChords.push_back (Chord (_vChromaticScale[_iChord + 10], ChordType::Major));
 
 		iChordCount++;
+		_nMinorKey_ThreeMajorChords_Multiplier = 3;
 	}
 
 	// Diminished chords
@@ -62,7 +65,14 @@ void CChordBank::BuildMinor (uint8_t nRootPercent, uint8_t nOtherMinorPercent, u
 	{
 		_vChords.push_back (Chord (_vChromaticScale[_iChord + 2], ChordType::Diminished));
 		iChordCount++;
+		_nMinorKey_DimChord_Multiplier = 1;
 	}
+
+	_nMinorKey_TotalChordsAvailable = 
+		(_nMinorKey_RootChord_Multiplier * _nNumMinChordVars) +
+		(_nMinorKey_TwoOtherMinorChords_Multiplier * _nNumMinChordVars) +
+		(_nMinorKey_ThreeMajorChords_Multiplier * _nNumMajChordVars) +
+		(_nMinorKey_DimChord_Multiplier * _nNumDimChordVars);
 
 	ASSERT (_vChords.size() == 100);
 }
@@ -78,6 +88,7 @@ void CChordBank::BuildMajor (uint8_t nRootPercent, uint8_t nOtherMajorPercent, u
 	{
 		_vChords.push_back (Chord (_vChromaticScale[_iChord], ChordType::Major));
 		iChordCount++;
+		_nMajorKey_RootChord_Multiplier = 1;
 	}
 
 	// Other major chords
@@ -89,6 +100,7 @@ void CChordBank::BuildMajor (uint8_t nRootPercent, uint8_t nOtherMajorPercent, u
 			_vChords.push_back (Chord (_vChromaticScale[_iChord + 7], ChordType::Major));
 
 		iChordCount++;
+		_nMajorKey_TwoOtherMajorChords_Multiplier = 2;
 	}
 
 	// Minor chords
@@ -102,6 +114,7 @@ void CChordBank::BuildMajor (uint8_t nRootPercent, uint8_t nOtherMajorPercent, u
 			_vChords.push_back (Chord (_vChromaticScale[_iChord + 9], ChordType::Minor));
 
 		iChordCount++;
+		_nMajorKey_ThreeMinorChords_Multiplier = 3;
 	}
 
 	// Diminished chords
@@ -109,7 +122,14 @@ void CChordBank::BuildMajor (uint8_t nRootPercent, uint8_t nOtherMajorPercent, u
 	{
 		_vChords.push_back (Chord (_vChromaticScale[_iChord + 11], ChordType::Diminished));
 		iChordCount++;
+		_nMajorKey_DimChord_Multiplier = 1;
 	}
+
+	_nMajorKey_TotalChordsAvailable = 
+		(_nMajorKey_RootChord_Multiplier * _nNumMajChordVars) +
+		(_nMajorKey_TwoOtherMajorChords_Multiplier * _nNumMajChordVars) +
+		(_nMajorKey_ThreeMinorChords_Multiplier * _nNumMinChordVars) +
+		(_nMajorKey_DimChord_Multiplier * _nNumDimChordVars);
 
 	ASSERT (_vChords.size() == 100);
 }
@@ -161,42 +181,59 @@ int32_t CChordBank::BuildMajorChordVariations (const std::vector<uint32_t>& ctv)
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Major)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("");
+	_nNumMajChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Dominant_7th)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("7");
+	_nNumMajChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Major_7th)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("maj7");
+	_nNumMajChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Dominant_9th)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("9");
+	_nNumMajChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Major_9th)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("maj9");
+	_nNumMajChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Add_9)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("add9");
+	_nNumMajChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Sus_2)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("sus2");
+	_nNumMajChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::_7_Sus_2)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("7sus2");
+	_nNumMajChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Sus_4)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("sus4");
+	_nNumMajChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::_7_Sus_4)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("7sus4");
+	_nNumMajChordVars += n ? 1 : 0;
+
+	// If nothing specified, ensure at least one entry (basic major type)
+	if (v.size() == 0)
+	{
+		v.push_back ("");
+		_nNumMajChordVars = 1;
+	}
 
 	return result;
 }
@@ -211,18 +248,29 @@ int32_t CChordBank::BuildMinorChordVariations (const std::vector<uint32_t>& ctv)
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Minor)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("m");
+	_nNumMinChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Minor_7th)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("m7");
+	_nNumMinChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Minor_9th)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("m9");
+	_nNumMinChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Minor_Add_9)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("madd9");
+	_nNumMinChordVars += n ? 1 : 0;
+
+	// If nothing specified, ensure at least one entry (basic minor type)
+	if (v.size() == 0)
+	{
+		v.push_back ("m");
+		_nNumMinChordVars = 1;
+	}
 
 	return result;
 }
@@ -237,14 +285,24 @@ int32_t CChordBank::BuildDimChordVariations (const std::vector<uint32_t>& ctv)
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Dim)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("dim");
+	_nNumDimChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::Dim_7th)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("dim7");
+	_nNumDimChordVars += n ? 1 : 0;
 
 	n = ctv[static_cast<uint32_t> (ChordTypeVariation::HalfDim)];
 	for (uint32_t i = 0; i < n; i++)
 		v.push_back ("m7b5");
+	_nNumDimChordVars += n ? 1 : 0;
+
+	// If nothing specified, ensure at least one entry (basic dim)
+	if (v.size() == 0)
+	{
+		v.push_back ("dim");
+		_nNumDimChordVars = 1;
+	}
 
 	return result;
 }

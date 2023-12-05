@@ -17,25 +17,27 @@ CMIDIHandler::CMIDIHandler (std::string sInputFile) : _sInputFile (sInputFile)
 	// Default values, when chord type variations not specified in the command file.
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major)]		= 1000;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dominant_7th)] = 100;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_7th)]	= 150;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dominant_9th)] = 50;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_9th)]	= 50;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Add_9)]		= 200;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_7th)]	= 10;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dominant_9th)] = 10;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Major_9th)]	= 10;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Add_9)]		= 80;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_2)]		= 15;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_2)]		= 15;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Sus_4)]		= 10;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::_7_Sus_4)]		= 10;
 	//
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor)]		= 1000;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_7th)]	= 250;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_9th)]	= 50;
-	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_Add_9)]	= 150;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_7th)]	= 100;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_9th)]	= 10;
+	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Minor_Add_9)]	= 10;
 	//
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dim)]			= 0;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::Dim_7th)]		= 1;
 	_vChordTypeVariationFactors[static_cast<int>(ChordTypeVariation::HalfDim)]		= 1;
 
 	_eng.seed (_rdev());
+
+	_vParamsUsed.resize (static_cast<uint16_t>(ParamCode::SYS_ParameterCount));
 }
 
 CMIDIHandler::StatusCode CMIDIHandler::CreateRandomFunkGrooveMIDICommandFile (std::string sOutFile, bool bOverwriteOutFile)
@@ -150,11 +152,29 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateRandomFunkGrooveMIDICommandFile (st
 	return result;
 }
 
-CMIDIHandler::StatusCode CMIDIHandler::Verify()
+CMIDIHandler::StatusCode CMIDIHandler::VerifyFile()
 {
+	// Basically, a wrapper for VerifyMemFile. It simply loads the
+	// command file first.
+
 	StatusCode result = StatusCode::Success;
 
-	akl::LoadTextFileIntoVector (_sInputFile, _vInput);
+	if (!akl::MyFileExists (_sInputFile))
+	{
+		std::ostringstream ss;
+		ss << "Unable to open input file.";
+		_sStatusMessage = ss.str();
+		return StatusCode::InvalidInputFile;
+	}
+
+	akl::LoadTextFileIntoVector (_sInputFile, _vFile);
+	return VerifyMemFile (_vFile);
+}
+
+
+CMIDIHandler::StatusCode CMIDIHandler::VerifyMemFile (const std::vector<std::string>& vFile)
+{
+	StatusCode result = StatusCode::Success;
 
 	uint8_t nDataLines = 0;
 	uint16_t nNumberOfNotes = 0;
@@ -190,32 +210,60 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 	uint32_t nRCRIndex = 0;
 	uint32_t nRCRLineOffset = 0;
 
-	for each (auto sLine in _vInput)
+	//_vParamsUsed.resize (static_cast<uint16_t>(ParamCode::SYS_ParameterCount));
+	_vParamsUsed.assign (_vParamsUsed.size(), 0);
+
+	bool bFirstRuler = false;
+	for each (auto sLine in vFile)
 	{
 		_vInputCopy.push_back (sLine);
 
 		nLineNum++;
 		nRCRIndex = (nLineNum - 1) + nRCRLineOffset;
 
-
 		std::string sTemp = akl::RemoveWhitespace (sLine, 4); // strip all ws
+		auto sTempSize = sTemp.size();
 
-		if (sTemp == "(#")
+		// Look for start of comment block.
+		auto pos = sTemp.find ("(#");
+		if (pos != std::string::npos )
 		{
-			bCommentBlock = true;
-			continue;
+			if (pos == 0)
+			{
+				bCommentBlock = true;
+				continue;
+			}
+			else
+			{
+				std::ostringstream ss;
+				ss << "Illegal text before start of comment block (line " << nLineNum << ")";
+				_sStatusMessage = ss.str();
+				return StatusCode::InvalidStartCommentBlock;
+			}
 		}
 
-		if (sTemp == "#)")
+		// Look for end of comment block.
+		pos = sTemp.find ("#)");
+		if (pos != std::string::npos )
 		{
-			bCommentBlock = false;
-			continue;
+			if (pos == sTempSize - 2)
+			{
+				bCommentBlock = false;
+				continue;
+			}
+			else
+			{
+				std::ostringstream ss;
+				ss << "Illegal text after end of comment block (line " << nLineNum << ")";
+				_sStatusMessage = ss.str();
+				return StatusCode::InvalidEndCommentBlock;
+			}
 		}
 
 		if (bCommentBlock)
 			continue;
 
-		if (sTemp.size() == 0)	// ignore blank lines
+		if (sTempSize == 0)	// ignore blank lines
 			continue;
 
 		if (sTemp[0] == '#')	// ignore comments
@@ -281,6 +329,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 
 		if (nDataLines == 2)
 		{
+			// The chords
 			std::vector<std::string> v = akl::Explode (sTemp, ",");
 			if (v.size() == 0)
 			{
@@ -304,17 +353,94 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				v[0] = ss.str();
 			}
 
+			// RCR variables
 			std::string sChordList;
 			std::string comma = "";
 			uint32_t nReplaceCount = 0;
 
 			// T2015A
 			std::uniform_int_distribution<uint16_t> randModInt (0, 99);
+			std::vector<std::string> vCPHistory;	// chord prog history
 			if (_bRCR)
+			{
 				InitChordBank (_sRCRKey);
 
+				
+				// Calculate the total number of chords that RCR can choose from. We do this by
+				// interrogating the two ChordBank instances. The important value is nNumChordChoices,
+				// and we use this to determine how much of the history log to look at when
+				// checking if a chord has already used.
+				uint32_t nNumChordChoices = _vChordBank[0]->GetTotalChordsAvailableForMajorKey();
+				uint32_t nNumChordChoices_ModInt = _vChordBank[1]->GetTotalChordsAvailableForMinorKey();
+				if (_sRCRKey.find ("m") != std::string::npos)	// minor key
+				{
+					nNumChordChoices = _vChordBank[0]->GetTotalChordsAvailableForMinorKey();
+					nNumChordChoices_ModInt = _vChordBank[1]->GetTotalChordsAvailableForMajorKey();
+				}
+				if (_nModalInterchangeChancePercentage)
+					nNumChordChoices += nNumChordChoices_ModInt;
+				//
+				// Ensure that the history count does not exceed the number of chord choices.
+				if (_nRCRHistoryCount >= nNumChordChoices - 1)
+					_nRCRHistoryCount = 0;
+
+
+
+
+				// Read ahead to get the chord progression history - if it exists.
+				// We only consider enough of the history records as determined by _nRCRHistoryCount.
+				uint32_t nRCRHistoryRecordsToBeChecked = 0;
+				uint32_t iLine = nLineNum;
+				while (nRCRHistoryRecordsToBeChecked < _nRCRHistoryCount)
+				{
+					if (iLine >= vFile.size())
+						break;
+
+					std::string s = vFile[iLine++];
+
+					if (s.substr(0, 32) == sRulerOld || s.substr(0, 31) == sRulerNew.substr(0, 31))
+						break;
+
+					if (s[0] != '#')
+						continue;
+
+					// try to verify that this is indeed a chord list
+					std::vector<std::string> v = akl::Explode (s, ",");
+					bool bValid = true;
+					for (auto c : v)
+					{
+						std::string sChordName = c.substr (1, c.size());	// strip leading #
+						if (sChordName[0] == '?')
+							sChordName = sChordName.substr (1, sChordName.size());
+
+						std::vector<std::string> vChordIntervals;
+						uint8_t nRoot = 0;
+						std::string sChordType;
+						if (!GetChordIntervals (sChordName, nRoot, vChordIntervals, sChordType))
+						{
+							bValid = false;
+							break;
+						}
+
+					}
+
+					if (bValid)
+					{
+						vCPHistory.push_back (s);
+						nRCRHistoryRecordsToBeChecked++;
+					}
+				}
+			}
+
+			// Ensure the history count is correct (if, say, some of the history
+			// was deleted by the user).
+			_nRCRHistoryCount = vCPHistory.size();
+
+			uint32_t nChord = 0;
 			for each (auto c in v)
 			{
+				nChord++;
+
 				std::vector<std::string> vChordIntervals;
 				uint8_t nRoot = 0;
 
@@ -354,12 +480,42 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				{
 					if (_bRCR)
 					{
-						// T2015A Which chord bank to use - the main one or the Modal Interchange one.
-						uint16_t iRandModInt = randModInt (_eng);
-						uint8_t iCB = _vChordBankChoice[iRandModInt];
+						std::string sCurChord = sChordName.substr (1, sChordName.size());
 
-						_vChordBank[iCB]->SetRandomChord();
-						sChordName = _vChordBank[iCB]->GetChordName() + _vChordBank[iCB]->GetChordVariation();
+						auto IsDuplicateChord = [&]()
+						{
+							bool bResult = false;
+
+							if (sChordName == sCurChord)
+								return true;
+
+							for (auto sChordList : vCPHistory)
+							{
+								sChordList = sChordList.substr (1, sChordList.size());
+								std::vector<std::string> v = akl::Explode (sChordList, ",");
+								if (v.size() == 0)
+									continue;
+
+								std::string sOldChord = v[nChord - 1];
+								sOldChord = akl::RemoveWhitespace (sOldChord, 4);
+								if (sChordName == sOldChord.substr (1, sOldChord.size()))
+									return true;
+							}
+
+							return bResult;
+						};
+
+						// Pick a new chord, but reject if it chooses the same chord.
+						do 
+						{
+							// T2015A Which chord bank to use - the main one or the Modal Interchange one.
+							uint16_t iRandModInt = randModInt (_eng);
+							uint8_t iCB = _vChordBankChoice[iRandModInt];
+
+							_vChordBank[iCB]->SetRandomChord();
+							sChordName = _vChordBank[iCB]->GetChordName() + _vChordBank[iCB]->GetChordVariation();
+						} while (IsDuplicateChord());
+
 						nReplaceCount++;
 						if (nReplaceCount == 1)
 							_vInputCopy[nRCRIndex] = "#" + _vInputCopy[nRCRIndex];
@@ -401,6 +557,9 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				//_vInputCopy.insert (_vInputCopy.begin() + nRCRIndex + 1, sChordList);
 				_vInputCopy.insert (_vInputCopy.begin() + nRCRIndex, sChordList);
 				nRCRLineOffset++;
+
+				// Increment RCR history count, which will be saved back to command file.
+				_nRCRHistoryCount++;
 			}
 
 			nDataLines++;
@@ -430,6 +589,15 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 
 		if (sTemp[0] == '+')	// parameter
 		{
+			// Do not allow any parameters after music data.
+			if (_nFirstRuler > 0 && nLineNum > _nFirstRuler)
+			{
+				std::ostringstream ss;
+				ss << "Line " << nLineNum << ": No parameters allowed after start of music data.";
+				_sStatusMessage = ss.str();
+				return StatusCode::IllegalParamAfterMusicData;
+			}
+
 			std::string parameter = sTemp.substr (1, sTemp.size() - 1);
 
 			std::vector<std::string> vKeyValue = akl::Explode (parameter, "=");
@@ -444,8 +612,27 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 
 			std::vector<std::string> vKV2 = akl::Explode (sLine.substr (1, sLine.size() - 1), "=");	// ws not stripped
 
-			if (vKeyValue[0] == "BassNote")
+			// lambda
+			auto sParam = vKeyValue[0];
+			auto IsParamAlreadySpecified = [&](auto paramCode){
+				if (_vParamsUsed[static_cast<uint16_t>(paramCode)] != 0
+					&& _vParamsUsed[static_cast<uint16_t>(paramCode)] != nLineNum)
+				{
+					std::ostringstream ss;
+					ss << "Line " << nLineNum << ": Parameter '+" << sParam << "' already specified at line "
+						<< _vParamsUsed[static_cast<uint16_t>(paramCode)] << ".";
+					_sStatusMessage = ss.str();
+					return true;
+				}
+				_vParamsUsed[static_cast<uint16_t>(paramCode)] = nLineNum;
+				return false;
+			};
+
+			if (sParam == _mParamCodes[ParamCode::BassNote])
 			{
+				if (IsParamAlreadySpecified (ParamCode::BassNote))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
 				{
 					_sStatusMessage = "Invalid +BassNote value (valid: 0 or 1).";
@@ -454,8 +641,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_bAddBassNote = nVal == 1;
 				continue;
 			}
-			if (vKeyValue[0] == "RootNoteOnly")
+			else if (sParam == _mParamCodes[ParamCode::RootNoteOnly])
 			{
+				if (IsParamAlreadySpecified (ParamCode::RootNoteOnly))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
 				{
 					_sStatusMessage = "Invalid +RootNoteOnly value (valid: 0 or 1).";
@@ -464,8 +654,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_bRootNoteOnly = nVal == 1;
 				continue;
 			}
-			else if (vKeyValue[0] == "Velocity")
+			else if (sParam == _mParamCodes[ParamCode::Velocity])
 			{
+				if (IsParamAlreadySpecified (ParamCode::Velocity))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 127))
 				{
 					_sStatusMessage = "Invalid +Velocity value (range 1-127).";
@@ -473,8 +666,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nVelocity = nVal;
 			}
-			else if (vKeyValue[0] == "RandVelVariation")
+			else if (sParam == _mParamCodes[ParamCode::RandVelVariation])
 			{
+				if (IsParamAlreadySpecified (ParamCode::RandVelVariation))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 127))
 				{
 					_sStatusMessage = "Invalid +RandVelVariation value (range 0-127).";
@@ -482,8 +678,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nRandVelVariation = nVal;
 			}
-			else if (vKeyValue[0] == "RandNoteStartOffset")
+			else if (sParam == _mParamCodes[ParamCode::RandNoteStartOffset])
 			{
+				if (IsParamAlreadySpecified (ParamCode::RandNoteStartOffset))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 32))
 				{
 					_sStatusMessage = "Invalid +RandNoteStartOffset value (range 0-32).";
@@ -493,8 +692,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				if (_nRandNoteStartOffset > 0)
 					_bRandNoteStart = true;
 			}
-			else if (vKeyValue[0] == "RandNoteEndOffset")
+			else if (sParam == _mParamCodes[ParamCode::RandNoteEndOffset])
 			{
+				if (IsParamAlreadySpecified (ParamCode::RandNoteEndOffset))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 32))
 				{
 					_sStatusMessage = "Invalid +RandNoteEndOffset value (range 0-32).";
@@ -504,8 +706,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				if (_nRandNoteEndOffset > 0)
 					_bRandNoteEnd = true;
 			}
-			else if (vKeyValue[0] == "RandNoteOffsetTrim")
+			else if (sParam == _mParamCodes[ParamCode::RandNoteOffsetTrim])
 			{
+				if (IsParamAlreadySpecified (ParamCode::RandNoteOffsetTrim))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
 				{
 					_sStatusMessage = "Invalid +RandNoteOffsetTrim value (valid: 0 or 1).";
@@ -513,8 +718,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_bRandNoteOffsetTrim = nVal == 1;
 			}
-			else if (vKeyValue[0] == "NoteStagger")
+			else if (sParam == _mParamCodes[ParamCode::NoteStagger])
 			{
+				if (IsParamAlreadySpecified (ParamCode::NoteStagger))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, -32, 32))
 				{
 					_sStatusMessage = "Invalid +NoteStagger value (range -32 to 32).";
@@ -522,8 +730,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nNoteStagger = nVal;
 			}
-			else if (vKeyValue[0] == "OctaveRegister")
+			else if (sParam == _mParamCodes[ParamCode::OctaveRegister])
 			{
+				if (IsParamAlreadySpecified (ParamCode::OctaveRegister))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 7))
 				{
 					_sStatusMessage = "Invalid +OctaveRegister value (range 0-7).";
@@ -531,8 +742,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_sOctaveRegister = vKeyValue[1];
 			}
-			else if (vKeyValue[0] == "TransposeThreshold")
+			else if (sParam == _mParamCodes[ParamCode::TransposeThreshold])
 			{
+				if (IsParamAlreadySpecified (ParamCode::TransposeThreshold))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 48))
 				{
 					_sStatusMessage = "Invalid +TransposeThreshold value (range 0-48).";
@@ -540,8 +754,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nTransposeThreshold = nVal;
 			}
-			else if (vKeyValue[0] == "Arpeggiator")
+			else if (sParam == _mParamCodes[ParamCode::Arpeggiator])
 			{
+				if (IsParamAlreadySpecified (ParamCode::Arpeggiator))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 13))
 				{
 					_sStatusMessage = "Invalid +Arpeggiator value (range 0-13).";
@@ -549,8 +766,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nArpeggiator = nVal;
 			}
-			else if (vKeyValue[0] == "ArpTime")
+			else if (sParam == _mParamCodes[ParamCode::ArpTime])
 			{
+				if (IsParamAlreadySpecified (ParamCode::ArpTime))
+					return StatusCode::ParamAlreadySpecified;
+
 				bool bOK = akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 32);
 				if (bOK && !(nVal > 0 && !(nVal & (nVal - 1))))	// must be power of 2 (1, 2, 4, 8, 16 or 32)
 					bOK = false;
@@ -562,8 +782,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_nArpTime = nVal;
 				_nArpNoteTicks = _ticksPerBar / _nArpTime;
 			}
-			else if (vKeyValue[0] == "ArpGatePercent")
+			else if (sParam == _mParamCodes[ParamCode::ArpGatePercent])
 			{
+				if (IsParamAlreadySpecified (ParamCode::ArpGatePercent))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 1, 200))
 				{
 					_sStatusMessage = "Invalid +ArpGatePercent value (range 1-200).";
@@ -571,8 +794,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nArpGatePercent = nVal / 100.0f;
 			}
-			else if (vKeyValue[0] == "ArpOctaveSteps")
+			else if (sParam == _mParamCodes[ParamCode::ArpOctaveSteps])
 			{
+				if (IsParamAlreadySpecified (ParamCode::ArpOctaveSteps))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, -6, 6))
 				{
 					_sStatusMessage = "Invalid +ArpOctaveSteps value (range -6 to 6).";
@@ -580,12 +806,18 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nArpOctaveSteps = nVal;
 			}
-			else if (vKeyValue[0] == "TrackName")
+			else if (sParam == _mParamCodes[ParamCode::TrackName])
 			{
+				if (IsParamAlreadySpecified (ParamCode::TrackName))
+					return StatusCode::ParamAlreadySpecified;
+
 				_sTrackName = akl::RemoveWhitespace (vKV2[1], 11);
 			}
-			else if (vKeyValue[0] == "FunkStrum")
+			else if (sParam == _mParamCodes[ParamCode::FunkStrum])
 			{
+				if (IsParamAlreadySpecified (ParamCode::FunkStrum))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 6))
 				{
 					_sStatusMessage = "Invalid +FunkStrum value (range 0-6).";
@@ -596,8 +828,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 					_nNoteStagger = nVal;
 				continue;
 			}
-			else if (vKeyValue[0] == "FunkStrumUpStrokeAttenuation")
+			else if (sParam == _mParamCodes[ParamCode::FunkStrumUpStrokeAttenuation])
 			{
+				if (IsParamAlreadySpecified (ParamCode::FunkStrumUpStrokeAttenuation))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyDoubleInteger (vKeyValue[1], ndVal, 0.1, 1))
 				{
 					_sStatusMessage = "Invalid +FunkStrumUpStrokeAttenuation value (range 0.1 - 1.0).";
@@ -606,8 +841,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_nFunkStrumUpStrokeAttenuation = ndVal;
 				continue;
 			}
-			else if (vKeyValue[0] == "FunkStrumVelDeclineIncrement")
+			else if (sParam == _mParamCodes[ParamCode::FunkStrumVelDeclineIncrement])
 			{
+				if (IsParamAlreadySpecified (ParamCode::FunkStrumVelDeclineIncrement))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 20))
 				{
 					_sStatusMessage = "Invalid +FunkStrumVelDeclineIncrement value (range 0-20).";
@@ -616,8 +854,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_nFunkStrumVelDeclineIncrement = nVal;
 				continue;
 			}
-			else if (vKeyValue[0] == "AutoMelody")
+			else if (sParam == _mParamCodes[ParamCode::AutoMelody])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoMelody))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
 				{
 					_sStatusMessage = "Invalid +AutoMelody value (valid: 0 or 1).";
@@ -627,8 +868,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				_autoMelodyLineNum = nLineNum;
 				continue;
 			}
-			else if (vKeyValue[0] == "AutoRhythmNoteLenBias")
+			else if (sParam == _mParamCodes[ParamCode::AutoRhythmNoteLenBias])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoRhythmNoteLenBias))
+					return StatusCode::ParamAlreadySpecified;
+
 				_sAutoRhythmNoteLenBias = vKeyValue[1];
 				if (!ValidBiasParam (_sAutoRhythmNoteLenBias, 6))
 				{
@@ -636,8 +880,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 					return StatusCode::InvalidAutoRhythmNoteLenBias;
 				}
 			}
-			else if (vKeyValue[0] == "AutoRhythmGapLenBias")
+			else if (sParam == _mParamCodes[ParamCode::AutoRhythmGapLenBias])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoRhythmGapLenBias))
+					return StatusCode::ParamAlreadySpecified;
+
 				_sAutoRhythmGapLenBias = vKeyValue[1];
 				if (!ValidBiasParam (_sAutoRhythmGapLenBias, 6))
 				{
@@ -645,8 +892,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 					return StatusCode::InvalidAutoRhythmGapLenBias;
 				}
 			}
-			else if (vKeyValue[0] == "AutoRhythmConsecutiveNoteChancePercentage")
+			else if (sParam == _mParamCodes[ParamCode::AutoRhythmConsecutiveNoteChancePercentage])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoRhythmConsecutiveNoteChancePercentage))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100))
 				{
 					_sStatusMessage = "Invalid +AutoRhythmConsecutiveNoteChancePercentage value (range 0-100).";
@@ -654,8 +904,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nAutoRhythmConsecutiveNoteChancePercentage = std::stoi (vKeyValue[1]);
 			}
-			else if (vKeyValue[0] == "AllMelodyNotes")
+			else if (sParam == _mParamCodes[ParamCode::AllMelodyNotes])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AllMelodyNotes))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
 				{
 					_sStatusMessage = "Invalid +AllMelodyNotes value (valid: 0 or 1).";
@@ -663,8 +916,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_bAllMelodyNotes = nVal == 1;
 			}
-			else if (vKeyValue[0] == "AutoChordsNumBars")
+			else if (sParam == _mParamCodes[ParamCode::AutoChordsNumBars])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChordsNumBars))
+					return StatusCode::ParamAlreadySpecified;
+
 				bool bInvalid = false;
 				int num = 0;
 				try
@@ -683,8 +939,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nAutoChordsNumBars = num;
 			}
-			else if (vKeyValue[0] == "AutoChordsMinorChordBias")
+			else if (sParam == _mParamCodes[ParamCode::AutoChordsMinorChordBias])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChordsMinorChordBias))
+					return StatusCode::ParamAlreadySpecified;
+
 				_sAutoChordsMinorChordBias = vKeyValue[1];
 				if (!ValidBiasParam (_sAutoChordsMinorChordBias, 3))
 				{
@@ -695,6 +954,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				{
 					std::vector<std::string> v = akl::Explode (_sAutoChordsMinorChordBias, ",");
 					int num = 0;
+					_vAutoChordsMinorChordBias.clear();
 					for (int i = 0; i < 3; i++)
 					{
 						int n = stoi (v[i]);
@@ -709,8 +969,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 					}
 				}
 			}
-			else if (vKeyValue[0] == "AutoChordsMajorChordBias")
+			else if (sParam == _mParamCodes[ParamCode::AutoChordsMajorChordBias])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChordsMajorChordBias))
+					return StatusCode::ParamAlreadySpecified;
+
 				_sAutoChordsMajorChordBias = vKeyValue[1];
 				if (!ValidBiasParam (_sAutoChordsMajorChordBias, 3))
 				{
@@ -721,6 +984,7 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				{
 					std::vector<std::string> v = akl::Explode (_sAutoChordsMajorChordBias, ",");
 					int num = 0;
+					_vAutoChordsMajorChordBias.clear();
 					for (int i = 0; i < 3; i++) 
 					{
 						int n = stoi (v[i]);
@@ -735,8 +999,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 					}
 				}
 			}
-			else if (vKeyValue[0] == "AutoChordsShortNoteBiasPercent")
+			else if (sParam == _mParamCodes[ParamCode::AutoChordsShortNoteBiasPercent])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChordsShortNoteBiasPercent))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100))
 				{
 					_sStatusMessage = "Invalid +AutoChordsShortNoteBiasPercent value (range 0-100).";
@@ -744,8 +1011,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nAutoChordsShortNoteBiasPercent = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_maj")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_maj])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_maj))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_maj value (range 0-100000).";
@@ -754,8 +1024,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Major);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_7")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_7])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_7))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_7 value (range 0-100000).";
@@ -764,8 +1037,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Dominant_7th);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_maj7")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_maj7])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_maj7))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_maj7 value (range 0-100000).";
@@ -774,8 +1050,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Major_7th);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_9")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_9])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_9))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_9 value (range 0-100000).";
@@ -784,8 +1063,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Dominant_9th);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_maj9")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_maj9])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_maj9))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_maj9 value (range 0-100000).";
@@ -794,8 +1076,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Major_9th);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_add9")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_add9])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_add9))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_add9 value (range 0-100000).";
@@ -804,8 +1089,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Add_9);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_sus2")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_sus2])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_sus2))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_sus2 value (range 0-100000).";
@@ -814,8 +1102,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Sus_2);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_7sus2")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_7sus2])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_7sus2))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_7sus2 value (range 0-100000).";
@@ -824,8 +1115,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::_7_Sus_2);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_sus4")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_sus4])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_sus4))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_sus4 value (range 0-100000).";
@@ -834,8 +1128,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Sus_4);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_7sus4")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_7sus4])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_7sus4))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_7sus4 value (range 0-100000).";
@@ -844,8 +1141,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::_7_Sus_4);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_min")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_min])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_min))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_min value (range 0-100000).";
@@ -854,8 +1154,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Minor);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_m7")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_m7])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_m7))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_m7 value (range 0-100000).";
@@ -864,8 +1167,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Minor_7th);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_m9")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_m9])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_m9))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_m9 value (range 0-100000).";
@@ -874,8 +1180,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Minor_9th);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_madd9")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_madd9])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_madd9))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_madd9 value (range 0-100000).";
@@ -884,8 +1193,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Minor_Add_9);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_dim7")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_dim7])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_dim7))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_dim7 value (range 0-100000).";
@@ -894,8 +1206,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Dim_7th);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_dim")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_dim])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_dim))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_dim value (range 0-100000).";
@@ -904,8 +1219,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::Dim);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "AutoChords_CTV_m7b5")
+			else if (sParam == _mParamCodes[ParamCode::AutoChords_CTV_m7b5])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoChords_CTV_m7b5))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100000))
 				{
 					_sStatusMessage = "Invalid +AutoChords_CTV_m7b5 value (range 0-100000).";
@@ -914,8 +1232,11 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				uint32_t i = static_cast<uint32_t>(ChordTypeVariation::HalfDim);
 				_vChordTypeVariationFactors[i] = nVal;
 			}
-			else if (vKeyValue[0] == "WriteOldRuler")
+			else if (sParam == _mParamCodes[ParamCode::WriteOldRuler])
 			{
+				if (IsParamAlreadySpecified (ParamCode::WriteOldRuler))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
 				{
 					_sStatusMessage = "Invalid +WriteOldRuler value (valid: 0 or 1).";
@@ -925,16 +1246,22 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				if (_bWriteOldRuler)
 					sRuler = sRulerOld;
 			}
-			else if (vKeyValue[0] == "RandomChordReplacementKey")
+			else if (sParam == _mParamCodes[ParamCode::RandomChordReplacementKey])
 			{
+				if (IsParamAlreadySpecified (ParamCode::RandomChordReplacementKey))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!_bAutoChords)
 				{
 					_sRCRKey = vKeyValue[1];
 					_bRCR = true;
 				}
 			}
-			else if (vKeyValue[0] == "AutoMelodyDontUsePentatonic")
+			else if (sParam == _mParamCodes[ParamCode::AutoMelodyDontUsePentatonic])
 			{
+				if (IsParamAlreadySpecified (ParamCode::AutoMelodyDontUsePentatonic))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 1))
 				{
 					_sStatusMessage = "Invalid +AutoMelodyDontUsePentatonic value (valid: 0 or 1).";
@@ -942,9 +1269,12 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_bAutoMelodyDontUsePentatonic = nVal == 1;
 			}
-			else if (vKeyValue[0] == "ModalInterchangeChancePercentage")
+			else if (sParam == _mParamCodes[ParamCode::ModalInterchangeChancePercentage])
 			{
 				// T2015A
+				if (IsParamAlreadySpecified (ParamCode::ModalInterchangeChancePercentage))
+					return StatusCode::ParamAlreadySpecified;
+
 				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 100))
 				{
 					_sStatusMessage = "Invalid +ModalInterchangeChancePercentage value (range 0-100).";
@@ -952,11 +1282,23 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 				}
 				_nModalInterchangeChancePercentage = std::stoi (vKeyValue[1]);
 			}
+			else if (sParam == _mParamCodes[ParamCode::SYS_RCRHistoryCount])
+			{
+				if (IsParamAlreadySpecified (ParamCode::SYS_RCRHistoryCount))
+					return StatusCode::ParamAlreadySpecified;
+
+				if (!akl::VerifyTextInteger (vKeyValue[1], nVal, 0, 10000))
+				{
+					_sStatusMessage = "Invalid +SYS_RCRHistoryCount value (range 0-10000).";
+					return StatusCode::InvalidSYS_RCRHistoryCount;
+				}
+				_nRCRHistoryCount = std::stoi (vKeyValue[1]);
+			}
 			else
 			{
 				std::string p = sLine.substr (1, sTemp.size() - 1);
-				_sStatusMessage = "Unrecognized command file parameter: +" + vKV2[0];
-				return StatusCode::UnrecognizedCommandFileParameter;
+				_sStatusMessage = "Invalid command file parameter: +" + vKV2[0];
+				return StatusCode::InvalidCommandFileParameter;
 			}
 
 			continue;
@@ -968,6 +1310,13 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			// The next two lines should contain
 			// (1) Note Positions: series of hash groups
 			// (2) Comma-separated Chord Names, one for each of the Note Position hash groups.
+
+			// Remember first occurrence.
+			if (!bFirstRuler)
+			{
+				bFirstRuler = true;
+				_nFirstRuler = nLineNum;
+			}
 
 			nRulerLen = sLine.length();
 
@@ -1018,6 +1367,12 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 		ss << "Line " << nLineNum << ": Invalid line.";
 		_sStatusMessage = ss.str();
 		return StatusCode::InvalidLine;
+	}
+
+	if (_nFirstRuler == 0)
+	{
+		_sStatusMessage = "You have not specified any music data.";
+		return StatusCode::NoMusicData;
 	}
 
 
@@ -1098,6 +1453,14 @@ CMIDIHandler::StatusCode CMIDIHandler::Verify()
 			_mMelodyNotes["madd9"].push_back (10);
 		}
 	}
+
+	if (_bAllMelodyNotes)
+	{
+		_bAutoMelody = false;
+		_bRandNoteStart = false;
+		_bRandNoteEnd = false;
+	}
+
 
 	return result;
 }
@@ -1281,7 +1644,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoRhythm (std::string filen
 	uint32_t nLine2 = 0;
 	uint32_t iNewChordList = 0;
 	bool bIgnoreNextLine = false;
-	for (auto s : _vInput)
+	for (auto s : _vFile)
 	{
 		if (bIgnoreNextLine)
 		{
@@ -1337,7 +1700,7 @@ CMIDIHandler::StatusCode CMIDIHandler::CopyFileWithAutoChords (std::string filen
 
 	uint8_t nNumBarsPerLine = _nAutoChordsNumBars == 2 ? 2 : 4;
 
-	for (auto s : _vInput)
+	for (auto s : _vFile)
 	{
 		if (nIgnoreLines > 0)
 		{
@@ -1748,12 +2111,6 @@ CMIDIHandler::StatusCode CMIDIHandler::ConvertMIDIToSMFFTI (std::string inFile, 
 		return StatusCode::OutputFileAlreadyExists;
 	}
 
-	std::vector<std::string> vOutFile;
-
-	// Load existing content of output file if it exists.
-	if (akl::MyFileExists (outFile))
-		akl::LoadTextFileIntoVector (outFile, vOutFile);
-
 	// Convert notes to relative note intervals.
 	// eg. From "60, 63, 67" to "0, 3, 7".
 	auto SetNoteZeroOffset = [](std::vector<uint16_t>& vNoteIntervals)
@@ -1919,13 +2276,29 @@ CMIDIHandler::StatusCode CMIDIHandler::ConvertMIDIToSMFFTI (std::string inFile, 
 	std::string vLine;
 	uint32_t iChord = 0;
 
+	//--------------------------------------------------------------------------------
+	// Let's bash the SMFFTI-formatted data out to file.
+	std::vector<std::string> vOutFile;
+
+	// Load existing content of output file if it exists.
+	if (akl::MyFileExists (outFile))
+		akl::LoadTextFileIntoVector (outFile, vOutFile);
+
+	// The file may, or may not, be a valid SMFFTI file. Assuming it's a text
+	// file of some description, we'll always add the new chord data at the end.
+	// But if we have detected a first ruler, it's assumed to be a SMFFTI file,
+	// so we'll remove all lines from this first ruler to eof, since we don't
+	// want the original chord data.
+	auto status = VerifyMemFile (vOutFile);
+	if (_nFirstRuler > 0)
+		vOutFile.erase (vOutFile.begin() + _nFirstRuler - 1, vOutFile.end());
+
 	//std::string sTime = akl::TimeStamp();
 	//vOutFile.push_back ("\n------------------------------------------------");
 	//vOutFile.push_back ("# Timestamp: " + sTime);
 
 	while (n32ndPos < n32ndCount)
 	{
-		vOutFile.push_back ("");
 		vOutFile.push_back (sRuler);
 
 		vLine = std::string (vOutStrChordPos.begin() + n32ndPos, vOutStrChordPos.begin() + n32ndPos + nRulerLen);
@@ -2035,7 +2408,14 @@ CMIDIHandler::StatusCode CMIDIHandler::CreateMIDIFile (const std::string& filena
 	FinishMidiFile (ofs);
 
 	if (_bRCR)
+	{
+		// Update file with state value that remembers the count of RCR history records.
+		std::string sParam = "+" + _mParamCodes[ParamCode::SYS_RCRHistoryCount] + "=" + 
+			std::to_string (_nRCRHistoryCount);
+		SetParameter (_vInputCopy, sParam);
+
 		akl::WriteVectorToTextFile (_sInputFile, _vInputCopy);
+	}
 
 	return nRes;
 }
@@ -3043,6 +3423,10 @@ void CMIDIHandler::AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSe
 	std::string sChordType;
 	GetChordIntervals (chordName, nRoot, vChordIntervals, sChordType);
 
+	// 2311281548 Also apply transposition to root note. This helps for bass line melodies,
+	// if we don't want wide register. Particularly useful when Root Note Only used.
+	while (nRoot > (_nProvisionalLowestNote + _nTransposeThreshold) || nRoot > 127)
+		nRoot -= 12;
 
 	// Init note stagger offset. If value positive, start with lowest note; if negative,
 	// start from highest. First note itself is not staggered.
@@ -3107,6 +3491,10 @@ void CMIDIHandler::AddMIDIChordNoteEvents (int32_t nMelodyNote, uint32_t nNoteSe
 		{
 			uint8_t rn = vNotes[randNote (_eng)];
 			nNote = nRoot + rn;
+
+			// 231128 We now transpose for +AutoMelody
+			while (nNote > (_nProvisionalLowestNote + _nTransposeThreshold) || nNote > 127)
+				nNote -= 12;
 
 			// Remember random note interval (rn) for output to 'melody text file'
 			_vRandomMelodyNotes.push_back (rn);
@@ -3266,8 +3654,61 @@ bool CMIDIHandler::GetChordIntervals (std::string sChordName, uint8_t& nRoot,
 	return bOK;
 }
 
+CMIDIHandler::StatusCode CMIDIHandler::SetParameter (std::vector<std::string>& vF, const std::string& sP)
+{
+	// Note this process only updates the memory (vector) file.
+	// (The updated data needs to be verified before writing to file.)
 
+	_sStatusMessage = "We're golden!";
+	StatusCode result = StatusCode::Success;
 
+	// Parse the parameter argument.
+	std::string sParam = sP;
+	std::vector<std::string> vP = akl::Explode (sParam, "=");
+	for (size_t i = 0; i < vP.size(); ++i)
+		vP[i] = akl::RemoveWhitespace (vP[i], 3);
+	//
+	if (vP[0][0] == '+')
+		sParam = vP[0].substr (1, vP[0].size() - 1);	// remove plus-sign prefix
+
+	ParamCode pCode;
+	bool bValidParam = false;
+	for (const auto& pair : _mParamCodes) {
+        if (pair.second == sParam) {
+			pCode = pair.first;
+			bValidParam = true;
+			break;
+		}
+	}
+
+	if (!bValidParam)
+	{
+		_sStatusMessage = "Invalid command file parameter: +" + sParam;
+		return StatusCode::InvalidCommandFileParameter;
+	}
+
+	std::string sNewParam = "+" + sParam + " = " + vP[1];	// reformatted
+
+	uint16_t nLine = _vParamsUsed[static_cast<uint16_t>(pCode)];
+	if (nLine > 0)
+	{
+		// parameter currently specified - we will change this
+		vF[nLine - 1] = sNewParam;
+	}
+	else
+	{
+		// Didn't find existing value, so bung it in before first occurrence of ruler.
+		vF.insert (vF.begin() + _nFirstRuler - 1, "");
+		vF.insert (vF.begin() + _nFirstRuler - 1, sNewParam);
+	}
+
+	return result;
+}
+
+std::vector<std::string> CMIDIHandler::GetFileVec()
+{
+	return _vFile;
+}
 
 uint32_t CMIDIHandler::Swap32 (uint32_t n) const
 {
@@ -3496,13 +3937,14 @@ std::string CMIDIHandler::GetStatusMessage()
 //-----------------------------------------------------------------------------
 // Static class members
 
-std::string CMIDIHandler::_version = "0.44";
+std::string CMIDIHandler::_version = "0.45";
 
 std::map<std::string, std::string>CMIDIHandler::_mChordTypes;
 std::map<std::string, std::vector<uint8_t>>CMIDIHandler::_mMelodyNotes;
 std::map<std::string, uint8_t>CMIDIHandler::_mChromaticScale;
 std::map<std::string, uint8_t>CMIDIHandler::_mChromaticScale2;
 std::vector<std::string>CMIDIHandler::_vRFGChords;
+std::map<CMIDIHandler::ParamCode, std::string>CMIDIHandler::_mParamCodes;
 
 CMIDIHandler::ClassMemberInit CMIDIHandler::cmi;
 
@@ -3642,6 +4084,106 @@ CMIDIHandler::ClassMemberInit::ClassMemberInit ()
 	_vRFGChords.push_back ("E7sus4");
 	_vRFGChords.push_back ("A7sus4");
 	_vRFGChords.push_back ("B7sus4");
+
+	// Set up the parameter codes
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AllMelodyNotes, "AllMelodyNotes"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::Arpeggiator, "Arpeggiator"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::ArpGatePercent, "ArpGatePercent"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::ArpOctaveSteps, "ArpOctaveSteps"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::ArpTime, "ArpTime"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChordsMajorChordBias, "AutoChordsMajorChordBias"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChordsMinorChordBias, "AutoChordsMinorChordBias"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChordsNumBars, "AutoChordsNumBars"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChordsShortNoteBiasPercent, "AutoChordsShortNoteBiasPercent"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_7, "AutoChords_CTV_7"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_7sus2, "AutoChords_CTV_7sus2"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_7sus4, "AutoChords_CTV_7sus4"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_9, "AutoChords_CTV_9"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_add9, "AutoChords_CTV_add9"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_dim, "AutoChords_CTV_dim"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_dim7, "AutoChords_CTV_dim7"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_m7, "AutoChords_CTV_m7"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_m7b5, "AutoChords_CTV_m7b5"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_m9, "AutoChords_CTV_m9"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_madd9, "AutoChords_CTV_madd9"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_maj, "AutoChords_CTV_maj"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_maj7, "AutoChords_CTV_maj7"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_maj9, "AutoChords_CTV_maj9"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_min, "AutoChords_CTV_min"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_sus2, "AutoChords_CTV_sus2"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoChords_CTV_sus4, "AutoChords_CTV_sus4"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoMelody, "AutoMelody"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoMelodyDontUsePentatonic, "AutoMelodyDontUsePentatonic"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoRhythmConsecutiveNoteChancePercentage, "AutoRhythmConsecutiveNoteChancePercentage"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoRhythmGapLenBias, "AutoRhythmGapLenBias"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::AutoRhythmNoteLenBias, "AutoRhythmNoteLenBias"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::BassNote, "BassNote"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::FunkStrum, "FunkStrum"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::FunkStrumUpStrokeAttenuation, "FunkStrumUpStrokeAttenuation"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::FunkStrumVelDeclineIncrement, "FunkStrumVelDeclineIncrement"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::ModalInterchangeChancePercentage, "ModalInterchangeChancePercentage"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::NoteStagger, "NoteStagger"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::OctaveRegister, "OctaveRegister"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::RandNoteEndOffset, "RandNoteEndOffset"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::RandNoteOffsetTrim, "RandNoteOffsetTrim"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::RandNoteStartOffset, "RandNoteStartOffset"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::RandomChordReplacementKey, "RandomChordReplacementKey"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::RandVelVariation, "RandVelVariation"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::RootNoteOnly, "RootNoteOnly"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::TrackName, "TrackName"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::TransposeThreshold, "TransposeThreshold"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::Velocity, "Velocity"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::WriteOldRuler, "WriteOldRuler"));
+	_mParamCodes.insert (std::pair<CMIDIHandler::ParamCode, std::string>
+		(CMIDIHandler::ParamCode::SYS_RCRHistoryCount, "SYS_RCRHistoryCount"));
 }
 
 // Randomizer static variable declaration
